@@ -23,6 +23,9 @@ pub struct Sample {
     pub region: Vec<Rgb>,
 }
 
+#[allow(dead_code)]
+pub type SampleID = usize;
+
 impl Sample {
     pub fn new() -> Sample {
         Sample { region: Vec::new() }
