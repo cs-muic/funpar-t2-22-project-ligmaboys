@@ -76,13 +76,13 @@ impl Image {
     //
     pub fn get_region(&self, xs: &i32, ys: &i32, width: &i32, height: &i32) -> Sample {
         let mut sample: Sample = Sample::new();
-        for i in *xs..(*xs + width) {
-            for j in *ys..(*ys + height) {
+        for j in *ys..(*ys + height) {
+            for i in *xs..(*xs + width) {
                 let i = i as usize;
                 let j = j as usize;
                 sample.region.push(self.at(Vector2 {
-                    x: j as i32 % self.width as i32,
-                    y: i as i32 % self.height as i32,
+                    x: i as i32 % self.width as i32,
+                    y: j as i32 % self.height as i32,
                 }));
             }
         }
