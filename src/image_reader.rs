@@ -2,6 +2,7 @@ use image::{DynamicImage, GenericImageView};
 
 use crate::data::{
     colour::{self, make_rgb, Rgb},
+    sample::Sample,
     vector2::Vector2,
 };
 
@@ -13,23 +14,6 @@ pub struct Image {
     pub width: usize,
     pub height: usize,
     pub pixels: Vec<Rgb>,
-}
-
-//
-// Sample Container
-//
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Sample {
-    pub region: Vec<Rgb>,
-}
-
-#[allow(dead_code)]
-pub type SampleID = usize;
-
-impl Sample {
-    pub fn new() -> Sample {
-        Sample { region: Vec::new() }
-    }
 }
 
 impl Image {

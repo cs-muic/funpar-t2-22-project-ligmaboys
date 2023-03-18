@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use clap::Parser;
 use cli::Args;
 
-use crate::image_reader::{Sample, SampleID};
+use crate::data::sample::{Sample, SampleID};
+
 extern crate image;
 
 mod cli;
