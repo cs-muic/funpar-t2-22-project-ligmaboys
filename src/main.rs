@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use clap::Parser;
 use cli::Args;
 
+use crate::data::direction::Direction;
 use crate::data::sample::{Sample, SampleID};
 
 extern crate image;
@@ -48,4 +49,11 @@ fn main() {
         .collect();
 
     dbg!(&freq_mapping);
+
+    dbg!(&samples[0].compatible(&samples[1], Direction::Right));
+    dbg!(&samples[0].compatible(&samples[4], Direction::Down));
+    dbg!(&samples[5].compatible(&samples[4], Direction::Left));
+    dbg!(&samples[0].compatible(&samples[1], Direction::Left));
+    dbg!(&samples[0].compatible(&samples[1], Direction::Up));
+    dbg!(&samples[0].compatible(&samples[1], Direction::Down));
 }

@@ -74,10 +74,10 @@ impl Image {
     // width:   Region width
     // height:  Region height
     //
-    pub fn get_region(&self, xs: &i32, ys: &i32, width: &i32, height: &i32) -> Sample {
-        let mut sample: Sample = Sample::new();
-        for j in *ys..(*ys + height) {
-            for i in *xs..(*xs + width) {
+    pub fn get_region(&self, xs: &u32, ys: &u32, width: &u32, height: &u32) -> Sample {
+        let mut sample: Sample = Sample::new(*width, *height);
+        for j in *ys..(*ys + *height) {
+            for i in *xs..(*xs + *width) {
                 let i = i as usize;
                 let j = j as usize;
                 sample.region.push(self.at(Vector2 {
@@ -95,14 +95,14 @@ impl Image {
     // n: Pattern size
     //
     pub fn sample(&self, n: i32) -> Vec<Sample> {
-        let sampler = |xs, ys| self.get_region(&xs, &ys, &n, &n);
+        let sampler = |xs: u32, ys: u32| self.get_region(&xs, &ys, &(n as u32), &(n as u32));
         self.pixels
             .iter()
             .enumerate()
             .fold(Vec::<Sample>::new(), |mut samples, (idx, _)| {
                 let x = idx % self.width;
                 let y = idx / self.width;
-                let sample = sampler(x as i32, y as i32);
+                let sample = sampler(x as u32, y as u32);
                 samples.push(sample);
                 samples
             })
