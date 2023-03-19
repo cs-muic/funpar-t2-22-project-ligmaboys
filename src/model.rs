@@ -71,3 +71,95 @@ impl Model {
         self.samples.len()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn check_valid_model() {
+        use super::*;
+        use crate::data::direction::Direction;
+        let model = Model::create("samples/ProcessExampleLong.png", 3);
+        assert!(model.size() == 16);
+
+        let sample_1: usize = model
+            .samples
+            .clone()
+            .iter()
+            .position(|v| {
+                v.region
+                    == vec![
+                        [0, 0, 0],
+                        [136, 136, 255],
+                        [0, 0, 0],
+                        [0, 0, 0],
+                        [136, 136, 255],
+                        [0, 0, 0],
+                        [136, 136, 255],
+                        [136, 136, 255],
+                        [136, 136, 255],
+                    ]
+            })
+            .unwrap();
+
+        // Find the bottom compatible tile
+        let compatible: Vec<_> = (0..model.size())
+            .into_iter()
+            .filter(|s_idx| *&model.adjacency_rule[sample_1][Direction::Down.to_idx()][*s_idx])
+            .collect();
+        let bottom_compat = &model.samples[*&compatible[0]];
+        let picked_sample = &model.samples[sample_1];
+
+        assert_eq!(
+            bottom_compat.region.clone(),
+            vec![
+                [0, 0, 0],
+                [136, 136, 255],
+                [0, 0, 0],
+                [136, 136, 255],
+                [136, 136, 255],
+                [136, 136, 255],
+                [0, 0, 0],
+                [136, 136, 255],
+                [0, 0, 0]
+            ]
+        );
+
+        assert_eq!(
+            picked_sample.region.clone(),
+            vec![
+                [0, 0, 0],
+                [136, 136, 255],
+                [0, 0, 0],
+                [0, 0, 0],
+                [136, 136, 255],
+                [0, 0, 0],
+                [136, 136, 255],
+                [136, 136, 255],
+                [136, 136, 255],
+            ]
+        );
+
+        // Find the bottom compatible tile
+        let compatible: Vec<_> = (0..model.size())
+            .into_iter()
+            .filter(|s_idx| *&model.adjacency_rule[sample_1][Direction::Right.to_idx()][*s_idx])
+            .collect();
+        let right_compat = &model.samples[*&compatible[0]];
+        let picked_sample = &model.samples[sample_1];
+
+        assert_eq!(
+            right_compat.region.clone(),
+            vec![
+                [136, 136, 255],
+                [0, 0, 0],
+                [0, 0, 0],
+                [136, 136, 255],
+                [0, 0, 0],
+                [0, 0, 0],
+                [136, 136, 255],
+                [136, 136, 255],
+                [136, 136, 255],
+            ]
+        );
+    }
+}
