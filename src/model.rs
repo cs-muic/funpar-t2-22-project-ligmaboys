@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::data::direction::ALL_DIRECTIONS;
+use crate::data::direction::{Direction, ALL_DIRECTIONS};
 use crate::data::sample::{Sample, SampleID};
 
 extern crate image;
@@ -51,10 +51,11 @@ impl Model {
 
         // Create adjacency rules
         for s1 in 0..samples.len() {
-            for s2 in 0..samples.len() {
+            for s2 in s1..samples.len() {
                 for direction in &ALL_DIRECTIONS {
                     if samples[s1].compatible(&samples[s2], *direction) {
                         adjacency_rules[s1][direction.to_idx()][s2] = true;
+                        adjacency_rules[s2][direction.opposite().to_idx()][s1] = true;
                     }
                 }
             }
@@ -70,10 +71,37 @@ impl Model {
     pub fn size(&self) -> usize {
         self.samples.len()
     }
+
+    #[allow(dead_code)]
+    pub fn get_possible_nbrs(&self, sample_idx: SampleID, dir: Direction) -> Option<Vec<SampleID>> {
+        let nbrs = &self.adjacency_rule[sample_idx][dir.to_idx()];
+        let nbrs: Vec<SampleID> = nbrs
+            .clone()
+            .iter()
+            .enumerate()
+            .flat_map(|(idx, &possible)| if possible { Some(idx) } else { None })
+            .collect();
+
+        if nbrs.is_empty() {
+            None
+        } else {
+            Some(nbrs)
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::Model;
+
+    fn find_sample_idx(model: &Model, sample: Vec<[u8; 3]>) -> Option<usize> {
+        model
+            .samples
+            .clone()
+            .iter()
+            .position(|v| v.region == sample)
+    }
+
     #[test]
     fn check_valid_model() {
         use super::*;
@@ -81,31 +109,24 @@ mod tests {
         let model = Model::create("samples/ProcessExampleLong.png", 3);
         assert!(model.size() == 16);
 
-        let sample_1: usize = model
-            .samples
-            .clone()
-            .iter()
-            .position(|v| {
-                v.region
-                    == vec![
-                        [0, 0, 0],
-                        [136, 136, 255],
-                        [0, 0, 0],
-                        [0, 0, 0],
-                        [136, 136, 255],
-                        [0, 0, 0],
-                        [136, 136, 255],
-                        [136, 136, 255],
-                        [136, 136, 255],
-                    ]
-            })
-            .unwrap();
+        let sample_1 = find_sample_idx(
+            &model,
+            vec![
+                [0, 0, 0],
+                [136, 136, 255],
+                [0, 0, 0],
+                [0, 0, 0],
+                [136, 136, 255],
+                [0, 0, 0],
+                [136, 136, 255],
+                [136, 136, 255],
+                [136, 136, 255],
+            ],
+        )
+        .unwrap();
 
         // Find the bottom compatible tile
-        let compatible: Vec<_> = (0..model.size())
-            .into_iter()
-            .filter(|s_idx| *&model.adjacency_rule[sample_1][Direction::Down.to_idx()][*s_idx])
-            .collect();
+        let compatible: Vec<_> = model.get_possible_nbrs(sample_1, Direction::Down).unwrap();
         let bottom_compat = &model.samples[*&compatible[0]];
         let picked_sample = &model.samples[sample_1];
 
@@ -139,14 +160,29 @@ mod tests {
             ]
         );
 
-        // Find the bottom compatible tile
-        let compatible: Vec<_> = (0..model.size())
-            .into_iter()
-            .filter(|s_idx| *&model.adjacency_rule[sample_1][Direction::Right.to_idx()][*s_idx])
-            .collect();
-        let right_compat = &model.samples[*&compatible[0]];
-        let picked_sample = &model.samples[sample_1];
+        // Should return origin
+        let compatible: Vec<_> = model
+            .get_possible_nbrs(*&compatible[0], Direction::Up)
+            .unwrap();
+        let left_compat = &model.samples[*&compatible[0]];
+        assert_eq!(
+            left_compat.region.clone(),
+            vec![
+                [0, 0, 0],
+                [136, 136, 255],
+                [0, 0, 0],
+                [0, 0, 0],
+                [136, 136, 255],
+                [0, 0, 0],
+                [136, 136, 255],
+                [136, 136, 255],
+                [136, 136, 255],
+            ]
+        );
 
+        // Find the right compatible tile
+        let compatible: Vec<_> = model.get_possible_nbrs(sample_1, Direction::Right).unwrap();
+        let right_compat = &model.samples[*&compatible[0]];
         assert_eq!(
             right_compat.region.clone(),
             vec![
@@ -155,6 +191,26 @@ mod tests {
                 [0, 0, 0],
                 [136, 136, 255],
                 [0, 0, 0],
+                [0, 0, 0],
+                [136, 136, 255],
+                [136, 136, 255],
+                [136, 136, 255],
+            ]
+        );
+
+        // Should return origin
+        let compatible: Vec<_> = model
+            .get_possible_nbrs(*&compatible[0], Direction::Left)
+            .unwrap();
+        let left_compat = &model.samples[*&compatible[0]];
+        assert_eq!(
+            left_compat.region.clone(),
+            vec![
+                [0, 0, 0],
+                [136, 136, 255],
+                [0, 0, 0],
+                [0, 0, 0],
+                [136, 136, 255],
                 [0, 0, 0],
                 [136, 136, 255],
                 [136, 136, 255],
