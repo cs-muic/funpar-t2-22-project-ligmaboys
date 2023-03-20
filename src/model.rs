@@ -3,13 +3,14 @@ use std::collections::HashMap;
 use crate::data::direction::{Direction, ALL_DIRECTIONS};
 use crate::data::sample::{Sample, SampleID};
 
+extern crate bit_set;
 extern crate image;
 use crate::image_reader;
 
 pub struct Model {
     pub samples: Vec<Sample>,
     pub freq_map: Vec<(SampleID, u32)>,
-    pub adjacency_rule: Vec<Vec<Vec<bool>>>,
+    pub adjacency_rule: Vec<[bit_set::BitSet; 4]>,
 }
 
 impl Model {
@@ -47,15 +48,23 @@ impl Model {
             .collect();
 
         // In the form [s1][direction][s2]
-        let mut adjacency_rules = vec![vec![vec![false; samples.len()]; 4]; samples.len()];
+        let sample_size = samples.len();
+        let bitsets: [bit_set::BitSet; 4] = [
+            bit_set::BitSet::with_capacity(sample_size),
+            bit_set::BitSet::with_capacity(sample_size),
+            bit_set::BitSet::with_capacity(sample_size),
+            bit_set::BitSet::with_capacity(sample_size),
+        ];
+
+        let mut adjacency_rules: Vec<[bit_set::BitSet; 4]> = vec![bitsets; samples.len()];
 
         // Create adjacency rules
         for s1 in 0..samples.len() {
             for s2 in s1..samples.len() {
                 for direction in &ALL_DIRECTIONS {
                     if samples[s1].compatible(&samples[s2], *direction) {
-                        adjacency_rules[s1][direction.to_idx()][s2] = true;
-                        adjacency_rules[s2][direction.opposite().to_idx()][s1] = true;
+                        adjacency_rules[s1][direction.to_idx()].insert(s2);
+                        adjacency_rules[s2][direction.opposite().to_idx()].insert(s1);
                     }
                 }
             }
@@ -75,12 +84,7 @@ impl Model {
     #[allow(dead_code)]
     pub fn get_possible_nbrs(&self, sample_idx: SampleID, dir: Direction) -> Option<Vec<SampleID>> {
         let nbrs = &self.adjacency_rule[sample_idx][dir.to_idx()];
-        let nbrs: Vec<SampleID> = nbrs
-            .clone()
-            .iter()
-            .enumerate()
-            .flat_map(|(idx, &possible)| if possible { Some(idx) } else { None })
-            .collect();
+        let nbrs: Vec<SampleID> = nbrs.iter().collect();
 
         if nbrs.is_empty() {
             None
