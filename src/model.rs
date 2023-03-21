@@ -221,5 +221,83 @@ mod tests {
                 [136, 136, 255],
             ]
         );
+
+        let sample_1 = find_sample_idx(
+            &model,
+            vec![
+                [0, 0, 0],
+                [136, 136, 255],
+                [0, 0, 0],
+                [0, 0, 0],
+                [136, 136, 255],
+                [0, 0, 0],
+                [0, 0, 0],
+                [136, 136, 255],
+                [0, 0, 0],
+            ],
+        )
+        .unwrap();
+
+        let compatible_bottom: Vec<_> = model.get_possible_nbrs(sample_1, Direction::Down).unwrap();
+        let compatible_top: Vec<_> = model.get_possible_nbrs(sample_1, Direction::Up).unwrap();
+        // let left_compat = &model.samples[*&compatible[0]];
+        // assert_eq!(
+        //     left_compat.region.clone(),
+        //     vec![
+        //         [0, 0, 0],
+        //         [136, 136, 255],
+        //         [0, 0, 0],
+        //         [0, 0, 0],
+        //         [136, 136, 255],
+        //         [0, 0, 0],
+        //         [136, 136, 255],
+        //         [136, 136, 255],
+        //         [136, 136, 255],
+        //     ]
+        // );
+
+        let samples = compatible_top
+            .iter()
+            .copied()
+            .map(|sample_id| &model.samples[sample_id as usize])
+            .collect::<Vec<_>>();
+
+        assert!(&samples.contains(&&Sample {
+            width: 3,
+            height: 3,
+            region: vec![
+                [0, 0, 0],
+                [136, 136, 255],
+                [0, 0, 0],
+                [0, 0, 0],
+                [136, 136, 255],
+                [0, 0, 0],
+                [0, 0, 0],
+                [136, 136, 255],
+                [0, 0, 0],
+            ],
+        }));
+
+        let samples = compatible_bottom
+            .iter()
+            .copied()
+            .map(|sample_id| &model.samples[sample_id as usize])
+            .collect::<Vec<_>>();
+
+        assert!(&samples.contains(&&Sample {
+            width: 3,
+            height: 3,
+            region: vec![
+                [0, 0, 0],
+                [136, 136, 255],
+                [0, 0, 0],
+                [0, 0, 0],
+                [136, 136, 255],
+                [0, 0, 0],
+                [0, 0, 0],
+                [136, 136, 255],
+                [0, 0, 0],
+            ],
+        }));
     }
 }
