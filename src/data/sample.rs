@@ -20,12 +20,13 @@ impl Sample {
         Sample {
             region: Grid2D {
                 width: width as usize,
-                height:height as usize,
+                height: height as usize,
                 data: Vec::with_capacity(width as usize * height as usize),
             },
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_top_left_pixel(&self) -> Rgb {
         *self.region.get(Vector2 { x: 0, y: 0 }).unwrap()
     }
@@ -33,6 +34,7 @@ impl Sample {
     //
     // Retrieve index position from Vector2 position
     //
+    #[allow(dead_code)]
     pub fn idx(&self, at: Vector2) -> usize {
         self.region.idx(at).unwrap()
     }

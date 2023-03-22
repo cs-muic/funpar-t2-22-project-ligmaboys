@@ -2,12 +2,12 @@ use std::collections::HashMap;
 
 use crate::data::direction::{Direction, ALL_DIRECTIONS};
 use crate::data::sample::{Sample, SampleID};
-use crate::data::grid2d::Grid2D;
 
 extern crate bit_set;
 extern crate image;
 use crate::image_reader;
 
+#[derive(Debug)]
 pub struct Model {
     pub samples: Vec<Sample>,
     pub freq_map: Vec<(SampleID, u32)>,
@@ -15,6 +15,9 @@ pub struct Model {
 }
 
 impl Model {
+    pub fn get_relative_freq(&self, sample_id: SampleID) -> f32 {
+        self.freq_map[sample_id].1 as f32
+    }
     pub fn create(img_path: &str, n_dimensions: usize) -> Model {
         // Parse CLI <ImgPath> <Shape>
 
@@ -98,6 +101,7 @@ impl Model {
 #[cfg(test)]
 mod tests {
     use super::Model;
+    use crate::data::grid2d::Grid2D;
 
     fn find_sample_idx(model: &Model, sample: Vec<[u8; 3]>) -> Option<usize> {
         model
@@ -265,20 +269,21 @@ mod tests {
 
         assert!(&samples.contains(&&Sample {
             region: Grid2D {
-            width: 3,
-            height: 3,
-            data: vec![
-                [0, 0, 0],
-                [136, 136, 255],
-                [0, 0, 0],
-                [0, 0, 0],
-                [136, 136, 255],
-                [0, 0, 0],
-                [0, 0, 0],
-                [136, 136, 255],
-                [0, 0, 0],
-            ],
-        }}));
+                width: 3,
+                height: 3,
+                data: vec![
+                    [0, 0, 0],
+                    [136, 136, 255],
+                    [0, 0, 0],
+                    [0, 0, 0],
+                    [136, 136, 255],
+                    [0, 0, 0],
+                    [0, 0, 0],
+                    [136, 136, 255],
+                    [0, 0, 0],
+                ],
+            }
+        }));
 
         let samples = compatible_bottom
             .iter()
@@ -288,19 +293,20 @@ mod tests {
 
         assert!(&samples.contains(&&Sample {
             region: Grid2D {
-            width: 3,
-            height: 3,
-            data: vec![
-                [0, 0, 0],
-                [136, 136, 255],
-                [0, 0, 0],
-                [0, 0, 0],
-                [136, 136, 255],
-                [0, 0, 0],
-                [0, 0, 0],
-                [136, 136, 255],
-                [0, 0, 0],
-            ],
-        }}));
+                width: 3,
+                height: 3,
+                data: vec![
+                    [0, 0, 0],
+                    [136, 136, 255],
+                    [0, 0, 0],
+                    [0, 0, 0],
+                    [136, 136, 255],
+                    [0, 0, 0],
+                    [0, 0, 0],
+                    [136, 136, 255],
+                    [0, 0, 0],
+                ],
+            }
+        }));
     }
 }
