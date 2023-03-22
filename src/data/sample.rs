@@ -20,7 +20,7 @@ impl Sample {
         Sample {
             region: Grid2D {
                 width: width as usize,
-                height:height as usize,
+                height: height as usize,
                 data: Vec::with_capacity(width as usize * height as usize),
             },
         }
