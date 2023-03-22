@@ -1,13 +1,11 @@
-use crate::{
-    data::grid2d::Grid2D,
-    model::{self, Model},
-};
+use crate::{data::grid2d::Grid2D, model::Model};
 
+#[allow(dead_code)]
 type TileIndex = usize;
 
 // Cell state
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct CoreCell {
+pub struct CoreCell {
     // This indiciates all of the possible values in a
     // given cell, initially every value is set to true.
     possible: bit_set::BitSet,
@@ -39,17 +37,18 @@ impl CoreCell {
     }
 }
 
-struct CoreState {
+#[derive(Debug)]
+pub struct CoreState {
     // Output grid
-    grid: Grid2D<CoreCell>,
+    pub grid: Grid2D<CoreCell>,
 
     // Number of cells that hasn't been
     // collapsed yet, intialized to grid.len()
-    remaining_uncollapsed_cells: usize,
+    pub remaining_uncollapsed_cells: usize,
 
     // Our wfc model, contains the rules
     // we need in order to collapse tiles.
-    model: Model,
+    pub model: Model,
 }
 
 impl CoreState {
@@ -59,7 +58,7 @@ impl CoreState {
     }
     pub fn new(path: &str, dimensions: usize, width: usize, height: usize) -> CoreState {
         let model = Model::create(path, dimensions);
-        let grid = Grid2D::init(width, height, CoreCell::new(model.samples.len()));
+        let grid = Grid2D::init(width, height, CoreCell::new(model.size()));
         let remaining_uncollapsed_cells = grid.size();
         CoreState {
             grid,

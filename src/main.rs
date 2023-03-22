@@ -1,3 +1,4 @@
+use crate::core::CoreState;
 use clap::Parser;
 use cli::Args;
 extern crate image;
@@ -12,7 +13,15 @@ fn main() {
     // Parse CLI <ImgPath> <Shape>
     let args: Args = Args::parse();
 
-    let model = model::Model::create(&args.img_path, args.n_dimensions);
+    let cs = CoreState::new(&args.img_path, args.n_dimensions, args.width, args.height);
 
-    dbg!(model.size());
+    dbg!(&cs);
+    println!(
+        "{:?}",
+        cs.grid
+            .data
+            .iter()
+            .map(|cell| cell.entropy(&cs.model))
+            .collect::<Vec<_>>()
+    )
 }
