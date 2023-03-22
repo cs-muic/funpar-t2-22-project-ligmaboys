@@ -24,15 +24,17 @@ impl CoreCell {
     pub fn total_possible_tile_freq(&self, model: &Model) -> u32 {
         self.possible
             .iter()
-            .map(|id| model.get_relative_freq(id))
+            .map(|id| model.get_relative_freq(id) as u32)
             .sum()
     }
     pub fn entropy(&self, model: &Model) -> f32 {
         let total_weight = self.total_possible_tile_freq(model) as f32;
         let sum_of_weight_log_weight = self.possible.iter().fold(0f32, |a, sample_id| {
-            let rf: f32 = model.get_relative_freq(sample_id) as f32;
+            let rf: f32 = model.get_relative_freq(sample_id);
+            //println!("ref: {}", rf);
             a + (rf * rf.log2())
         });
+        //println!("{} {}", total_weight, sum_of_weight_log_weight);
         total_weight.log2() - (sum_of_weight_log_weight / total_weight)
     }
 }
@@ -72,10 +74,32 @@ mod tests {
     use crate::model::Model;
 
     use super::CoreState;
+    fn find_sample_idx(model: &Model, sample: Vec<[u8; 3]>) -> Option<usize> {
+        model
+            .samples
+            .clone()
+            .iter()
+            .position(|v| v.region.data == sample)
+    }
 
     #[test]
     fn test_entropy() {
-        let cs = CoreState::new("samples/ProcessExample.png", 3, 100, 100);
+        let s1 = [
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+        ]
+        .to_vec();
+        let mut cs = CoreState::new("samples/Flowers.png", 3, 10, 10);
+        cs.grid.data[0].possible.clear();
+        cs.grid.data[0].possible.insert(1);
+        cs.grid.data[0].possible.insert(0);
         println!(
             "{:?}",
             cs.grid

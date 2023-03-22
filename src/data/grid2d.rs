@@ -13,12 +13,11 @@ pub struct Grid2D<T> {
 impl<T: Clone> Grid2D<T> {
     pub fn init(width: usize, height: usize, init_val: T) -> Grid2D<T> {
         let new_data = vec![init_val; width * height];
-        let new_grid = Grid2D {
-            width: width as usize,
-            height: height as usize,
+        Grid2D {
+            width,
+            height,
             data: new_data,
-        };
-        new_grid
+        }
     }
     // Given a Vector2 position, return the index
     // which corresponds to it in the 1D collection.
