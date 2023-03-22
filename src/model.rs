@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::data::direction::{Direction, ALL_DIRECTIONS};
 use crate::data::sample::{Sample, SampleID};
+use crate::data::grid2d::Grid2D;
 
 extern crate bit_set;
 extern crate image;
@@ -103,7 +104,7 @@ mod tests {
             .samples
             .clone()
             .iter()
-            .position(|v| v.region == sample)
+            .position(|v| v.region.data == sample)
     }
 
     #[test]
@@ -135,7 +136,7 @@ mod tests {
         let picked_sample = &model.samples[sample_1];
 
         assert_eq!(
-            bottom_compat.region.clone(),
+            bottom_compat.region.data.clone(),
             vec![
                 [0, 0, 0],
                 [136, 136, 255],
@@ -150,7 +151,7 @@ mod tests {
         );
 
         assert_eq!(
-            picked_sample.region.clone(),
+            picked_sample.region.data.clone(),
             vec![
                 [0, 0, 0],
                 [136, 136, 255],
@@ -170,7 +171,7 @@ mod tests {
             .unwrap();
         let left_compat = &model.samples[*&compatible[0]];
         assert_eq!(
-            left_compat.region.clone(),
+            left_compat.region.data.clone(),
             vec![
                 [0, 0, 0],
                 [136, 136, 255],
@@ -188,7 +189,7 @@ mod tests {
         let compatible: Vec<_> = model.get_possible_nbrs(sample_1, Direction::Right).unwrap();
         let right_compat = &model.samples[*&compatible[0]];
         assert_eq!(
-            right_compat.region.clone(),
+            right_compat.region.data.clone(),
             vec![
                 [136, 136, 255],
                 [0, 0, 0],
@@ -208,7 +209,7 @@ mod tests {
             .unwrap();
         let left_compat = &model.samples[*&compatible[0]];
         assert_eq!(
-            left_compat.region.clone(),
+            left_compat.region.data.clone(),
             vec![
                 [0, 0, 0],
                 [136, 136, 255],
@@ -263,9 +264,10 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert!(&samples.contains(&&Sample {
+            region: Grid2D {
             width: 3,
             height: 3,
-            region: vec![
+            data: vec![
                 [0, 0, 0],
                 [136, 136, 255],
                 [0, 0, 0],
@@ -276,7 +278,7 @@ mod tests {
                 [136, 136, 255],
                 [0, 0, 0],
             ],
-        }));
+        }}));
 
         let samples = compatible_bottom
             .iter()
@@ -285,9 +287,10 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert!(&samples.contains(&&Sample {
+            region: Grid2D {
             width: 3,
             height: 3,
-            region: vec![
+            data: vec![
                 [0, 0, 0],
                 [136, 136, 255],
                 [0, 0, 0],
@@ -298,6 +301,6 @@ mod tests {
                 [136, 136, 255],
                 [0, 0, 0],
             ],
-        }));
+        }}));
     }
 }

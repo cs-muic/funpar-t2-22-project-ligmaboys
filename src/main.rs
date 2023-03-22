@@ -3,6 +3,7 @@ use cli::Args;
 extern crate image;
 
 mod cli;
+mod core;
 mod data;
 mod image_reader;
 mod model;
