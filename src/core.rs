@@ -14,7 +14,7 @@ pub struct CoreCell {
 impl CoreCell {
     pub fn new(capacity: usize) -> CoreCell {
         let mut bs = bit_set::BitSet::with_capacity(capacity);
-        (0..capacity).into_iter().for_each(|x| {
+        (0..capacity).for_each(|x| {
             bs.insert(x);
         });
         CoreCell { possible: bs }
