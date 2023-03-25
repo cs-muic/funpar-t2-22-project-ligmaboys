@@ -14,9 +14,8 @@ chmod +x setup.sh && ./setup.sh
 ```
 
 ### Todo
-- Sample
-  - Construct a sample SampleID-to-colour mapping. (SampleID to top left pixel of the sample)
-- Grid2D impl
-- Refactor Sample and Img to use Grid2D
-- Core
+- Propagation
+  - Basic
+  - Parallel
+
 
