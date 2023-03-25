@@ -6,22 +6,22 @@ extern crate image;
 mod cli;
 mod core;
 mod data;
+mod entropy_coord;
 mod image_reader;
 mod model;
 
 fn main() {
-    // Parse CLI <ImgPath> <Shape>
+    // Parse CLI <ImgPath> <Shape> <OutputWidth> <OutputHeight>
     let args: Args = Args::parse();
 
-    let cs = CoreState::new(&args.img_path, args.n_dimensions, args.width, args.height);
+    let mut cs = CoreState::new(&args.img_path, args.n_dimensions, args.width, args.height);
 
-    dbg!(&cs);
-    println!(
-        "{:?}",
-        cs.grid
-            .data
-            .iter()
-            .map(|cell| cell.entropy(&cs.model))
-            .collect::<Vec<_>>()
-    )
+    dbg!(&cs.entropy_heap);
+
+    let least_entropy = &cs.entropy_heap.peek();
+    let least_entropy_pos = least_entropy.unwrap().coord;
+    dbg!(least_entropy);
+
+    dbg!(cs.choose_next_cell());
+    dbg!(least_entropy_pos);
 }
