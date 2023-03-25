@@ -65,6 +65,10 @@ impl CoreCell {
             .sum()
     }
 
+    pub fn collapsed(&mut self) {
+        self.is_collpased = true;
+    }
+
     #[allow(dead_code)]
     pub fn entropy_no_cache(&self, model: &Model) -> f32 {
         let total_weight = self.total_possible_tile_freq(model) as f32;
@@ -98,6 +102,32 @@ impl CoreCell {
         let freq = model.get_relative_freq(tile_index);
         self.sum_of_possible_tile_weights -= freq.0;
         self.sum_of_possible_tile_weight_log_weights -= freq.1;
+    }
+
+    //
+    // Roulette wheel selection algorithm,
+    // Choose a random sample with frequency hints taken into account
+    //
+    #[allow(dead_code)]
+    fn choose_sample_index(&self, context: &Model) -> TileIndex {
+        let mut rng = rand::thread_rng();
+
+        // Choose a random position in the distribution strip
+        let mut remaining = rng.gen_range(0..self.sum_of_possible_tile_weights);
+
+        for possible_sample_indx in &self.possible {
+            // This weight represents the width of the section on the strip
+            let weight = context.get_relative_freq(possible_sample_indx).0;
+
+            if remaining >= weight {
+                remaining -= weight;
+            } else {
+                return possible_sample_indx;
+            }
+        }
+
+        // should not end up here
+        unreachable!("sum_of_possible_weights was inconsistent with possible_tile_iter and FrequencyHints::relative_frequency");
     }
 }
 
@@ -136,6 +166,8 @@ impl CoreState {
 
         cs.distribute_entropy_noise();
 
+        // Fill the binary heap with the new
+        // entropy information after adding noise
         (0..cs.grid.size()).for_each(|idx| {
             let coord = cs.grid.to_coord(idx).unwrap();
             let entropy = cs.grid.get(coord).unwrap().entropy();
@@ -145,6 +177,10 @@ impl CoreState {
         cs
     }
 
+    //
+    // Apply abit of noise to all entropy values
+    // to lower the chance of having ties
+    //
     fn distribute_entropy_noise(&mut self) {
         let mut rng = rand::thread_rng();
         self.grid.data.iter_mut().for_each(|cell: &mut CoreCell| {
@@ -152,15 +188,66 @@ impl CoreState {
         });
     }
 
+    //
+    // Find the next cell which should be collapsed (lowest entropy)
+    //
     pub fn choose_next_cell(&mut self) -> Vector2 {
+        // Pop the entry with the lowest entropy
         while let Some(entropy_coord) = self.entropy_heap.pop() {
             let cell = self.grid.get(entropy_coord.coord).unwrap();
+
+            // If the cell hasn't been collapsed yet, we take it
             if !cell.is_collpased {
                 return entropy_coord.coord;
             }
+
+            // Otherwise we do nothing...
         }
 
+        // Remaining cells > 0 but heap is empty...
         unreachable!("entropy_heap is empty, but there are still uncollapsed cells");
+    }
+
+    //
+    // Collapse the cell at the given position.
+    //
+    #[allow(dead_code)]
+    fn collapse_cell_at(&mut self, coord: Vector2) {
+        let cell = self.grid.get_mut(coord).unwrap();
+        let sample_index_chosen = cell.choose_sample_index(&self.model);
+
+        // Set cell to collapsed
+        cell.collapsed();
+
+        // Remove ALL other possibilities
+        cell.possible.clear();
+
+        // Add the only one posibility
+        cell.possible.insert(sample_index_chosen);
+
+        // Note: We don't need to call remove_tile here because
+        // we simply don't care about the tile's entropy anymore, there
+        // is no point in recalculating it.
+    }
+
+    //
+    // Basic search and kill loop
+    //
+    #[allow(dead_code)]
+    fn run(&mut self) {
+        while self.remaining_uncollapsed_cells > 0 {
+            // Choose the next lowest cell
+            // which hasn't been collapsed yet
+            let next_coord = self.choose_next_cell();
+
+            // Collapse the chosen cell
+            self.collapse_cell_at(next_coord);
+
+            // Propagate the effects
+            // self.propagate();
+
+            self.remaining_uncollapsed_cells -= 1;
+        }
     }
 }
 
@@ -251,6 +338,43 @@ mod tests {
             let least_entropy = &cs.entropy_heap.peek();
             let least_entropy_pos = least_entropy.unwrap().coord;
             assert_eq!(cs.choose_next_cell(), least_entropy_pos)
+        }
+    }
+
+    #[test]
+    fn test_basic_collapse() {
+        let mut cs = CoreState::new("samples/Flowers.png", 3, 3, 3);
+
+        // Check that the same collapsed cell is never visited again
+        let mut positions_collapsed = bit_set::BitSet::new();
+
+        // Check that the next entropy is higher than the previous
+        let mut last_entropy = -100f32;
+
+        while cs.remaining_uncollapsed_cells > 0 {
+            // Find next cell to collapse
+            let pos = cs.choose_next_cell();
+
+            // Check if we've visited this same position before
+            let grid_idx = cs.grid.idx(pos).unwrap();
+            assert!(!positions_collapsed.contains(grid_idx));
+            positions_collapsed.insert(grid_idx);
+
+            // Check that after collapsing we only
+            // have one posibility left
+            cs.collapse_cell_at(pos);
+            let cell = cs.grid.get(pos).unwrap();
+            assert_eq!(cell.possible.len(), 1);
+
+            // Note: Here we use the value that was
+            // cached inside the cell since the beginning,
+            // since collapse_cell_at does not recalculate
+            // the entropy of the cell
+            let new_entropy = cell.entropy();
+            assert!(new_entropy > last_entropy);
+            last_entropy = new_entropy;
+
+            cs.remaining_uncollapsed_cells -= 1;
         }
     }
 }
