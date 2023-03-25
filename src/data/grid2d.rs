@@ -19,6 +19,22 @@ impl<T: Clone> Grid2D<T> {
             data: new_data,
         }
     }
+
+    // Given an index, return the coord
+    // which corresponds to it in the 2D representation.
+
+    pub fn to_coord(&self, pos: usize) -> Option<Vector2> {
+        let y = (pos / self.width) as i32;
+        let x = (pos % self.height) as i32;
+        let pos = Vector2 { x, y };
+
+        if self.valid_pos(pos) {
+            Some(pos)
+        } else {
+            None
+        }
+    }
+
     // Given a Vector2 position, return the index
     // which corresponds to it in the 1D collection.
 

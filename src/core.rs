@@ -1,4 +1,10 @@
+use std::collections::BinaryHeap;
+
+use crate::data::vector2::Vector2;
 use crate::{data::grid2d::Grid2D, model::Model};
+
+use crate::entropy_coord::EntropyCoord;
+use rand::Rng;
 
 #[allow(dead_code)]
 type TileIndex = usize;
@@ -13,6 +19,10 @@ pub struct CoreCell {
     sum_of_possible_tile_weights: u32,
 
     sum_of_possible_tile_weight_log_weights: f32,
+
+    entropy_noise: f32,
+
+    is_collpased: bool,
 }
 
 impl CoreCell {
@@ -30,7 +40,10 @@ impl CoreCell {
             possible: bs,
             sum_of_possible_tile_weights: 0,
             sum_of_possible_tile_weight_log_weights: 0f32,
+            entropy_noise: 0f32,
+            is_collpased: false,
         };
+
         cell.sum_of_possible_tile_weights = cell.total_possible_tile_freq(context);
 
         let sum_of_weight_log_weight = cell.possible.iter().fold(0f32, |a, sample_id| {
@@ -69,6 +82,7 @@ impl CoreCell {
         (self.sum_of_possible_tile_weights as f32).log2()
             - (self.sum_of_possible_tile_weight_log_weights
                 / self.sum_of_possible_tile_weights as f32)
+            + self.entropy_noise
     }
 
     //
@@ -99,6 +113,8 @@ pub struct CoreState {
     // Our wfc model, contains the rules
     // we need in order to collapse tiles.
     pub model: Model,
+
+    pub entropy_heap: BinaryHeap<EntropyCoord>,
 }
 
 impl CoreState {
@@ -110,16 +126,47 @@ impl CoreState {
         let model = Model::create(path, dimensions);
         let grid = Grid2D::init(width, height, CoreCell::new(model.size(), &model));
         let remaining_uncollapsed_cells = grid.size();
-        CoreState {
+
+        let mut cs = CoreState {
             grid,
             remaining_uncollapsed_cells,
             model,
+            entropy_heap: BinaryHeap::new(),
+        };
+
+        cs.distribute_entropy_noise();
+
+        (0..cs.grid.size()).for_each(|idx| {
+            let coord = cs.grid.to_coord(idx).unwrap();
+            let entropy = cs.grid.get(coord).unwrap().entropy();
+            cs.entropy_heap.push(EntropyCoord::new(entropy, coord))
+        });
+
+        cs
+    }
+
+    fn distribute_entropy_noise(&mut self) {
+        let mut rng = rand::thread_rng();
+        self.grid.data.iter_mut().for_each(|cell: &mut CoreCell| {
+            cell.entropy_noise = rng.gen_range(-0.0025f32..0.0025f32);
+        });
+    }
+
+    pub fn choose_next_cell(&mut self) -> Vector2 {
+        while let Some(entropy_coord) = self.entropy_heap.pop() {
+            let cell = self.grid.get(entropy_coord.coord).unwrap();
+            if !cell.is_collpased {
+                return entropy_coord.coord;
+            }
         }
+
+        unreachable!("entropy_heap is empty, but there are still uncollapsed cells");
     }
 }
 
 #[cfg(test)]
 mod tests {
+
     use crate::model::Model;
 
     use super::CoreState;
@@ -185,8 +232,25 @@ mod tests {
             assert!(approx_equal(
                 non_cached_entropy[0] as f64,
                 cached_entropy[0] as f64,
-                3
+                1
             ))
+        }
+    }
+
+    //
+    // Note: This is only for checking that the next chosen cell is the smallest value
+    // (This doesn't take into account cells which have been pushed multiple times into
+    //  the binary heap due to recalculation of their entropy, if this test is used in
+    //  conjunction with collpase, it will definitely fail.)
+    //
+    #[test]
+    fn test_binary_heap() {
+        let mut cs = CoreState::new("samples/Flowers.png", 3, 50, 50);
+
+        for _ in 0..cs.grid.size() {
+            let least_entropy = &cs.entropy_heap.peek();
+            let least_entropy_pos = least_entropy.unwrap().coord;
+            assert_eq!(cs.choose_next_cell(), least_entropy_pos)
         }
     }
 }

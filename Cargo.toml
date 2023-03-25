@@ -11,3 +11,4 @@ check = "1.0.0"
 clap = { version = "4.1.4", features = ["derive"] }
 fmt = "0.1.0"
 image = "0.24.5"
+rand = "0.8.5"
