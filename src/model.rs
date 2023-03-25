@@ -15,8 +15,8 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn get_relative_freq(&self, sample_id: SampleID) -> f32 {
-        self.freq_map[sample_id].1 as f32
+    pub fn get_relative_freq(&self, sample_id: SampleID) -> u32 {
+        self.freq_map[sample_id].1
     }
     pub fn create(img_path: &str, n_dimensions: usize) -> Model {
         // Parse CLI <ImgPath> <Shape>

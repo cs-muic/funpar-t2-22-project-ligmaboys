@@ -10,18 +10,18 @@ mod image_reader;
 mod model;
 
 fn main() {
-    // Parse CLI <ImgPath> <Shape>
+    // Parse CLI <ImgPath> <Shape> <OutputWidth> <OutputHeight>
     let args: Args = Args::parse();
 
     let cs = CoreState::new(&args.img_path, args.n_dimensions, args.width, args.height);
 
-    dbg!(&cs);
+    dbg!(&cs.grid);
     println!(
         "{:?}",
         cs.grid
             .data
             .iter()
-            .map(|cell| cell.entropy(&cs.model))
+            .map(|cell| cell.entropy())
             .collect::<Vec<_>>()
     )
 }
