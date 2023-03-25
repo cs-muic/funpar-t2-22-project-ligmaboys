@@ -10,14 +10,15 @@ use crate::image_reader;
 #[derive(Debug)]
 pub struct Model {
     pub samples: Vec<Sample>,
-    pub freq_map: Vec<(SampleID, u32)>,
+    pub freq_map: Vec<(SampleID, (u32, f32))>,
     pub adjacency_rule: Vec<[bit_set::BitSet; 4]>,
 }
 
 impl Model {
-    pub fn get_relative_freq(&self, sample_id: SampleID) -> u32 {
+    pub fn get_relative_freq(&self, sample_id: SampleID) -> (u32, f32) {
         self.freq_map[sample_id].1
     }
+
     pub fn create(img_path: &str, n_dimensions: usize) -> Model {
         // Parse CLI <ImgPath> <Shape>
 
@@ -48,7 +49,12 @@ impl Model {
         let freq_mapping: Vec<(SampleID, _)> = freqs
             .iter()
             .enumerate()
-            .map(|(i, freq)| (i as SampleID, *freq as u32))
+            .map(|(i, freq)| {
+                (
+                    i as SampleID,
+                    (*freq as u32, (*freq as f32) * (*freq as f32).log2()),
+                )
+            })
             .collect();
 
         // In the form [s1][direction][s2]

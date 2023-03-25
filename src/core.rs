@@ -34,8 +34,7 @@ impl CoreCell {
         cell.sum_of_possible_tile_weights = cell.total_possible_tile_freq(context);
 
         let sum_of_weight_log_weight = cell.possible.iter().fold(0f32, |a, sample_id| {
-            let rf: f32 = context.get_relative_freq(sample_id) as f32;
-            a + (rf * rf.log2())
+            a + context.get_relative_freq(sample_id).1
         });
 
         cell.sum_of_possible_tile_weight_log_weights = sum_of_weight_log_weight;
@@ -49,7 +48,7 @@ impl CoreCell {
     pub fn total_possible_tile_freq(&self, model: &Model) -> u32 {
         self.possible
             .iter()
-            .map(|id| model.get_relative_freq(id))
+            .map(|id| model.get_relative_freq(id).0)
             .sum()
     }
 
@@ -57,8 +56,7 @@ impl CoreCell {
     pub fn entropy_no_cache(&self, model: &Model) -> f32 {
         let total_weight = self.total_possible_tile_freq(model) as f32;
         let sum_of_weight_log_weight = self.possible.iter().fold(0f32, |a, sample_id| {
-            let rf: f32 = model.get_relative_freq(sample_id) as f32;
-            a + (rf * rf.log2())
+            a + model.get_relative_freq(sample_id).1
         });
 
         total_weight.log2() - (sum_of_weight_log_weight / total_weight)
@@ -84,8 +82,8 @@ impl CoreCell {
 
         // Recalculate the entropy
         let freq = model.get_relative_freq(tile_index);
-        self.sum_of_possible_tile_weights -= freq;
-        self.sum_of_possible_tile_weight_log_weights -= (freq as f32) * (freq as f32).log2();
+        self.sum_of_possible_tile_weights -= freq.0;
+        self.sum_of_possible_tile_weight_log_weights -= freq.1;
     }
 }
 
