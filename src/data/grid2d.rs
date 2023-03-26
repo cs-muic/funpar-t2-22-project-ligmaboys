@@ -1,4 +1,5 @@
 use super::vector2::Vector2;
+use std::fmt::{self, Debug};
 
 // Note: The attributes are public
 //
@@ -20,12 +21,17 @@ impl<T: Clone> Grid2D<T> {
         }
     }
 
+    pub fn set(&mut self, pos: Vector2, item: T) {
+        let idx = self.idx(pos).unwrap();
+        self.data[idx] = item;
+    }
+
     // Given an index, return the coord
     // which corresponds to it in the 2D representation.
 
     pub fn to_coord(&self, pos: usize) -> Option<Vector2> {
         let y = (pos / self.width) as i32;
-        let x = (pos % self.height) as i32;
+        let x = (pos % self.width) as i32;
         let pos = Vector2 { x, y };
 
         if self.valid_pos(pos) {
@@ -57,6 +63,14 @@ impl<T: Clone> Grid2D<T> {
         }
     }
 
+    #[allow(dead_code)]
+    pub fn get_copy(&self, pos: Vector2) -> Option<T> {
+        match self.idx(pos) {
+            Some(index) => Some(self.data[index].clone()),
+            None => None,
+        }
+    }
+
     // MUTABLE BORROW
     // Given a Vector2 position, return the
     // element at the corresponding position.
@@ -68,6 +82,8 @@ impl<T: Clone> Grid2D<T> {
         }
     }
 
+    
+
     // Ensure that the position is valid (not out of bounds)
     #[allow(dead_code)]
     pub fn valid_pos(&self, pos: Vector2) -> bool {
@@ -77,6 +93,24 @@ impl<T: Clone> Grid2D<T> {
     #[allow(dead_code)]
     pub fn size(&self) -> usize {
         self.width * self.height
+    }
+
+    pub fn enumerate(&self) -> impl Iterator<Item=(Vector2, &T)> + '_  {
+        self.data.iter().enumerate().map(|(idx, t)| (self.to_coord(idx).unwrap(), t))
+    }
+
+
+}
+
+impl<T: Clone + Debug> Grid2D<T> {
+    pub fn print(&self) {
+        
+        for x in 0..self.width as i32 {
+            for y in 0..self.height as i32 {
+                print!("({:?})", self.get(Vector2 { y, x }));
+            }
+            println!();
+        }
     }
 }
 
