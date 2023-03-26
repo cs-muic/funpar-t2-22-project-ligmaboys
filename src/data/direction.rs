@@ -10,9 +10,9 @@ impl Direction {
     pub fn to_idx(self) -> usize {
         match self {
             Direction::Up => 0,
-            Direction::Right => 1,
             Direction::Down => 2,
             Direction::Left => 3,
+            Direction::Right => 1,
         }
     }
 

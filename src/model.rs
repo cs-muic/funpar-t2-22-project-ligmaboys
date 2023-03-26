@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use crate::core::TileEnablerCount;
 use crate::data::direction::{Direction, ALL_DIRECTIONS};
 use crate::data::sample::{Sample, SampleID};
 
@@ -71,10 +70,11 @@ impl Model {
 
         // Create adjacency rules
         for s1 in 0..samples.len() {
-            for s2 in 0..samples.len() {
+            for s2 in s1..samples.len() {
                 for direction in &ALL_DIRECTIONS {
                     if samples[s1].compatible(&samples[s2], *direction) {
                         adjacency_rules[s1][direction.to_idx()].insert(s2);
+                        adjacency_rules[s2][direction.opposite().to_idx()].insert(s1);
                     }
                 }
             }
@@ -85,24 +85,6 @@ impl Model {
             freq_map: freq_mapping,
             adjacency_rule: adjacency_rules,
         }
-    }
-
-    pub fn get_initial_tile_enabler_counts(&self) -> Vec<TileEnablerCount> {
-        let mut ret: Vec<TileEnablerCount> = Vec::new();
-
-        for tile_a in 0..self.samples.len() {
-            let mut counts = TileEnablerCount {
-                by_direction: [0, 0, 0, 0],
-            };
-
-            for &direction in &ALL_DIRECTIONS {
-                let dir = direction.to_idx();
-                counts.by_direction[dir] = self.adjacency_rule[tile_a][dir].len();
-            }
-
-            ret.push(counts);
-        }
-        ret
     }
 
     pub fn size(&self) -> usize {

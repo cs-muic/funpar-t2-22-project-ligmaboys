@@ -15,6 +15,7 @@ chmod +x setup.sh && ./setup.sh
 
 ### Todo
 - Propagation
+  - Basic
   - Parallel
 
 
