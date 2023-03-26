@@ -14,14 +14,23 @@ fn main() {
     // Parse CLI <ImgPath> <Shape> <OutputWidth> <OutputHeight>
     let args: Args = Args::parse();
 
-    let mut cs = CoreState::new(&args.img_path, args.n_dimensions, args.width, args.height);
+    use std::time::Instant;
+    let now = Instant::now();
+    let ans = CoreState::process(&args.img_path, args.n_dimensions, args.width, args.height);
+    let elapsed = now.elapsed();
+    println!("Elapsed: {:.2?}", elapsed);
+    let w = ans
+        .iter()
+        .flat_map(|arr| vec![arr[0], arr[1], arr[2]])
+        .collect::<Vec<_>>();
 
-    dbg!(&cs.entropy_heap);
-
-    let least_entropy = &cs.entropy_heap.peek();
-    let least_entropy_pos = least_entropy.unwrap().coord;
-    dbg!(least_entropy);
-
-    dbg!(cs.choose_next_cell());
-    dbg!(least_entropy_pos);
+    // Save the buffer as "image.png"
+    image::save_buffer(
+        "image.png",
+        &w,
+        args.width as u32,
+        args.height as u32,
+        image::ColorType::Rgb8,
+    )
+    .unwrap()
 }

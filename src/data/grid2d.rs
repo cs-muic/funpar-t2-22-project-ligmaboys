@@ -20,12 +20,17 @@ impl<T: Clone> Grid2D<T> {
         }
     }
 
+    pub fn set(&mut self, pos: Vector2, item: T) {
+        let idx = self.idx(pos).unwrap();
+        self.data[idx] = item;
+    }
+
     // Given an index, return the coord
     // which corresponds to it in the 2D representation.
 
     pub fn to_coord(&self, pos: usize) -> Option<Vector2> {
         let y = (pos / self.width) as i32;
-        let x = (pos % self.height) as i32;
+        let x = (pos % self.width) as i32;
         let pos = Vector2 { x, y };
 
         if self.valid_pos(pos) {
@@ -77,6 +82,13 @@ impl<T: Clone> Grid2D<T> {
     #[allow(dead_code)]
     pub fn size(&self) -> usize {
         self.width * self.height
+    }
+
+    pub fn enumerate(&self) -> impl Iterator<Item = (Vector2, &T)> + '_ {
+        self.data
+            .iter()
+            .enumerate()
+            .map(|(idx, t)| (self.to_coord(idx).unwrap(), t))
     }
 }
 

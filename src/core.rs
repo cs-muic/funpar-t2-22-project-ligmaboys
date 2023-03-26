@@ -1,5 +1,8 @@
-use std::collections::BinaryHeap;
+use std::collections::{BinaryHeap, VecDeque};
 
+use crate::data::colour::Rgb;
+
+use crate::data::direction::ALL_DIRECTIONS;
 use crate::data::vector2::Vector2;
 use crate::{data::grid2d::Grid2D, model::Model};
 
@@ -7,7 +10,29 @@ use crate::entropy_coord::EntropyCoord;
 use rand::Rng;
 
 #[allow(dead_code)]
-type TileIndex = usize;
+pub type TileIndex = usize;
+
+// Indicate that the potential for tile_index appearing
+// in the cell at the coordinate has been removed
+
+#[derive(Debug, Clone)]
+pub struct RemovalUpdate {
+    tile_index: TileIndex,
+    coord: Vector2,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TileEnablerCount {
+    // `by_direction[d]` will return the count
+    // of enablers in the direction 'd'
+    pub by_direction: [usize; 4],
+}
+impl TileEnablerCount {
+    #[allow(dead_code)]
+    pub fn contains_any_zero_count(&self) -> bool {
+        self.by_direction.iter().any(|&count| count == 0)
+    }
+}
 
 // Cell state
 #[derive(Debug, Clone)]
@@ -16,13 +41,15 @@ pub struct CoreCell {
     // given cell, initially every value is set to true.
     possible: bit_set::BitSet,
 
-    sum_of_possible_tile_weights: u32,
+    pub sum_of_possible_tile_weights: u32,
 
-    sum_of_possible_tile_weight_log_weights: f32,
+    pub sum_of_possible_tile_weight_log_weights: f32,
 
     entropy_noise: f32,
 
-    is_collpased: bool,
+    pub is_collpased: bool,
+
+    pub tile_enabler_counts: Vec<TileEnablerCount>,
 }
 
 impl CoreCell {
@@ -42,6 +69,7 @@ impl CoreCell {
             sum_of_possible_tile_weight_log_weights: 0f32,
             entropy_noise: 0f32,
             is_collpased: false,
+            tile_enabler_counts: Vec::new(),
         };
 
         cell.sum_of_possible_tile_weights = cell.total_possible_tile_freq(context);
@@ -96,10 +124,24 @@ impl CoreCell {
     #[allow(dead_code)]
     pub fn remove_tile(&mut self, tile_index: TileIndex, model: &Model) {
         // Remove the tile
+
+        // println!(
+        //     "TILE REMOVING: {}, WEIGHT: {}",
+        //     tile_index,
+        //     model.get_relative_freq(tile_index).0
+        // );
+        // println!("TILE POSSIBLE: {:?}", self.possible);
+        // println!("TILE WEIGHTS: {}", self.sum_of_possible_tile_weights);
+        // println!(
+        //     "TILE NEXT WEIGTS: {}",
+        //     self.sum_of_possible_tile_weights - model.get_relative_freq(tile_index).0
+        // );
+
         self.possible.remove(tile_index);
 
         // Recalculate the entropy
         let freq = model.get_relative_freq(tile_index);
+
         self.sum_of_possible_tile_weights -= freq.0;
         self.sum_of_possible_tile_weight_log_weights -= freq.1;
     }
@@ -109,8 +151,12 @@ impl CoreCell {
     // Choose a random sample with frequency hints taken into account
     //
     #[allow(dead_code)]
-    fn choose_sample_index(&self, context: &Model) -> TileIndex {
+    fn choose_sample_index(&self, context: &Model) -> Option<TileIndex> {
         let mut rng = rand::thread_rng();
+
+        if self.sum_of_possible_tile_weights == 0 {
+            return None;
+        }
 
         // Choose a random position in the distribution strip
         let mut remaining = rng.gen_range(0..self.sum_of_possible_tile_weights);
@@ -122,12 +168,25 @@ impl CoreCell {
             if remaining >= weight {
                 remaining -= weight;
             } else {
-                return possible_sample_indx;
+                return Some(possible_sample_indx);
             }
         }
 
         // should not end up here
         unreachable!("sum_of_possible_weights was inconsistent with possible_tile_iter and FrequencyHints::relative_frequency");
+    }
+
+    #[allow(dead_code)]
+    fn has_no_possible_tiles(&self) -> bool {
+        self.possible.is_empty()
+    }
+
+    fn get_the_only_possible_tile_index(&self) -> Option<usize> {
+        if self.possible.is_empty() || self.possible.len() > 1 {
+            None
+        } else {
+            self.possible.iter().next()
+        }
     }
 }
 
@@ -145,6 +204,8 @@ pub struct CoreState {
     pub model: Model,
 
     pub entropy_heap: BinaryHeap<EntropyCoord>,
+
+    pub tile_removals: VecDeque<RemovalUpdate>,
 }
 
 impl CoreState {
@@ -152,6 +213,40 @@ impl CoreState {
     pub fn is_collpased(&self) -> bool {
         self.remaining_uncollapsed_cells == 0
     }
+
+    pub fn process(path: &str, dimensions: usize, width: usize, height: usize) -> Vec<Rgb> {
+        let mut corestate = CoreState::new(path, dimensions, width, height);
+
+        // println!("INITIAL ENTROPY: {:?}", &corestate.entropy_heap);
+
+        // println!("=== RULES ===");
+        // for i in 0..corestate.model.samples.len() {
+        //     println!(
+        //         "Sample ID {} -> {{{:?}}} {:?}",
+        //         i, corestate.model.adjacency_rule[i], &corestate.model.samples[i]
+        //     );
+        // }
+        // println!();
+
+        corestate.run();
+
+        // Copy result into output grid
+
+        let mut output_grid = Grid2D::init(width, height, 0);
+
+        for (coord, cell) in corestate.grid.enumerate() {
+            if let Some(tile_index) = cell.get_the_only_possible_tile_index() {
+                output_grid.set(coord, tile_index);
+            }
+        }
+
+        output_grid
+            .data
+            .iter()
+            .map(|&sample_id| corestate.model.samples[sample_id].get_top_left_pixel())
+            .collect()
+    }
+
     pub fn new(path: &str, dimensions: usize, width: usize, height: usize) -> CoreState {
         let model = Model::create(path, dimensions);
         let grid = Grid2D::init(width, height, CoreCell::new(model.size(), &model));
@@ -162,9 +257,17 @@ impl CoreState {
             remaining_uncollapsed_cells,
             model,
             entropy_heap: BinaryHeap::new(),
+            tile_removals: VecDeque::new(),
         };
 
         cs.distribute_entropy_noise();
+
+        let enabler_counts = cs.model.get_initial_tile_enabler_counts();
+
+        // Set the enabler count for all cells
+        cs.grid.data.iter_mut().for_each(|cell: &mut CoreCell| {
+            cell.tile_enabler_counts = enabler_counts.clone();
+        });
 
         // Fill the binary heap with the new
         // entropy information after adding noise
@@ -184,7 +287,7 @@ impl CoreState {
     fn distribute_entropy_noise(&mut self) {
         let mut rng = rand::thread_rng();
         self.grid.data.iter_mut().for_each(|cell: &mut CoreCell| {
-            cell.entropy_noise = rng.gen_range(-0.0025f32..0.0025f32);
+            cell.entropy_noise = rng.gen();
         });
     }
 
@@ -198,6 +301,7 @@ impl CoreState {
 
             // If the cell hasn't been collapsed yet, we take it
             if !cell.is_collpased {
+                // println!("COLLAPSED! -> {:?}", &entropy_coord.coord);
                 return entropy_coord.coord;
             }
 
@@ -205,6 +309,12 @@ impl CoreState {
         }
 
         // Remaining cells > 0 but heap is empty...
+        dbg!(&self
+            .grid
+            .data
+            .iter()
+            .filter(|v| v.possible.len() != 1)
+            .count());
         unreachable!("entropy_heap is empty, but there are still uncollapsed cells");
     }
 
@@ -213,17 +323,31 @@ impl CoreState {
     //
     #[allow(dead_code)]
     fn collapse_cell_at(&mut self, coord: Vector2) {
+        // println!("collapsing: cell {:?}", coord);
+
         let cell = self.grid.get_mut(coord).unwrap();
-        let sample_index_chosen = cell.choose_sample_index(&self.model);
+
+        let sample_index_chosen = cell.choose_sample_index(&self.model).unwrap();
 
         // Set cell to collapsed
         cell.collapsed();
+
+        cell.possible.remove(sample_index_chosen);
+
+        cell.possible.iter().for_each(|tile_index| {
+            self.tile_removals
+                .push_back(RemovalUpdate { tile_index, coord });
+        });
+
+        // println!("INIT REMOVAL LIST: {:?}", &self.tile_removals);
 
         // Remove ALL other possibilities
         cell.possible.clear();
 
         // Add the only one posibility
         cell.possible.insert(sample_index_chosen);
+
+        // println!("After collapse {:?}", &cell.possible);
 
         // Note: We don't need to call remove_tile here because
         // we simply don't care about the tile's entropy anymore, there
@@ -236,6 +360,8 @@ impl CoreState {
     #[allow(dead_code)]
     fn run(&mut self) {
         while self.remaining_uncollapsed_cells > 0 {
+            // println!("Iteration: {}", iter);
+
             // Choose the next lowest cell
             // which hasn't been collapsed yet
             let next_coord = self.choose_next_cell();
@@ -244,9 +370,118 @@ impl CoreState {
             self.collapse_cell_at(next_coord);
 
             // Propagate the effects
-            // self.propagate();
+            self.propagate();
+
+            // dbg!("FINISHED PROPAGATION");
 
             self.remaining_uncollapsed_cells -= 1;
+        }
+    }
+
+    //
+    // Remove possibilities based on collapsed cell
+    //
+    fn propagate(&mut self) {
+        while let Some(removal_update) = self.tile_removals.pop_front() {
+            'dir: for &direction in &ALL_DIRECTIONS {
+                // Propagate the effect to the neighbor in each direction
+                let neighbour_coord = removal_update.coord.neighbor(direction);
+
+                if let Some(cell_to_update) = self.grid.get(neighbour_coord) {
+                    cell_to_update
+                } else {
+                    continue 'dir;
+                };
+
+                // Iterate over all the tiles which may appear in the neighbouring cell
+                // (in the direction of the current one)
+                for compatible_tile in
+                    self.model.adjacency_rule[removal_update.tile_index][direction.to_idx()].iter()
+                {
+                    // println!("====================================================================================================");
+                    // println!();
+                    // println!("{:?}", &removal_update);
+                    // println!();
+                    // for y in 0..self.grid.height as i32 {
+                    //     for x in 0..self.grid.width as i32 {
+                    //         let possible =
+                    //             self.grid.get(Vector2 { x, y }).unwrap().possible.clone();
+                    //         let enablers: Vec<_> = possible
+                    //             .iter()
+                    //             .map(|idx| {
+                    //                 self.grid.get(Vector2 { x, y }).unwrap().tile_enabler_counts
+                    //                     [idx]
+                    //                     .by_direction
+                    //             })
+                    //             .collect();
+
+                    //         let zipped = possible.iter().zip(enablers.iter()).collect::<Vec<_>>();
+
+                    //         print!(
+                    //             "{}",
+                    //             format!("{:width$}", format!("({:?})", zipped), width = 50)
+                    //         );
+                    //     }
+                    //     println!();
+                    // }
+
+                    // println!("DIRECTION: {:?}", direction);
+                    // println!("Compatible Tile: {:?}", compatible_tile);
+
+                    let neighbor = self.grid.get_mut(neighbour_coord).unwrap();
+
+                    let count = {
+                        let count = &mut neighbor.tile_enabler_counts[compatible_tile].by_direction
+                            [direction.opposite().to_idx()];
+
+                        // println!("CURRENT ENABLER COUNT: {}", count);
+                        // println!();
+
+                        if *count == 0 {
+                            continue;
+                        }
+
+                        *count -= 1;
+                        *count
+                    };
+
+                    // If count is 0, we want to remove the tile from the neighbour
+                    if count == 0 {
+                        if neighbor.is_collpased
+                            || neighbor.tile_enabler_counts[compatible_tile]
+                                .by_direction
+                                .iter()
+                                .enumerate()
+                                .filter(|(dir, _)| dir != &(direction.opposite().to_idx()))
+                                .map(|(_, v)| v)
+                                .any(|&v| v == 0)
+                        {
+                            // println!("AVOIDED CLASH");
+                            continue;
+                        }
+
+                        // println!("COORDS: {:?}", neighbour_coord);
+                        self.grid
+                            .get_mut(neighbour_coord)
+                            .unwrap()
+                            .remove_tile(compatible_tile, &self.model);
+
+                        let entropy = EntropyCoord {
+                            entropy: self.grid.get(neighbour_coord).unwrap().entropy(),
+                            coord: neighbour_coord,
+                        };
+                        // print!("NEW ENTROPY: {:?}", &entropy);
+                        self.entropy_heap.push(entropy);
+
+                        self.tile_removals.push_back(RemovalUpdate {
+                            tile_index: compatible_tile,
+                            coord: neighbour_coord,
+                        });
+
+                        // println!("QUEUED: {}, at {:?}", compatible_tile, neighbour_coord);
+                    }
+                }
+            }
         }
     }
 }
@@ -254,9 +489,9 @@ impl CoreState {
 #[cfg(test)]
 mod tests {
 
-    use crate::model::Model;
+    use crate::{data::direction::Direction, model::Model};
 
-    use super::CoreState;
+    use super::{CoreCell, CoreState};
     fn find_sample_idx(model: &Model, sample: Vec<[u8; 3]>) -> Option<usize> {
         model
             .samples
@@ -376,5 +611,100 @@ mod tests {
 
             cs.remaining_uncollapsed_cells -= 1;
         }
+    }
+
+    #[test]
+    fn test_enablers_count() {
+        let cs = CoreState::new("samples/Flowers.png", 3, 5, 5);
+
+        let init_enablers_count = cs.model.get_initial_tile_enabler_counts();
+
+        cs.grid.data.iter().for_each(|cell: &CoreCell| {
+            assert_eq!(&cell.tile_enabler_counts, &init_enablers_count);
+        });
+    }
+
+    #[test]
+    fn test_enablers_count_specific() {
+        let cs = CoreState::new("samples/ProcessExample.png", 3, 5, 5);
+
+        let sample_1 = find_sample_idx(
+            &cs.model,
+            vec![
+                [136, 136, 255],
+                [136, 136, 255],
+                [136, 136, 255],
+                [136, 136, 255],
+                [0, 0, 0],
+                [0, 0, 0],
+                [136, 136, 255],
+                [0, 0, 0],
+                [0, 0, 0],
+            ],
+        )
+        .unwrap();
+
+        let init_enablers_count = cs.model.get_initial_tile_enabler_counts();
+        let sample_1_enablers_count = &init_enablers_count[sample_1];
+
+        assert_eq!(
+            sample_1_enablers_count.by_direction[Direction::Up.to_idx()],
+            1
+        );
+        assert_eq!(
+            sample_1_enablers_count.by_direction[Direction::Right.to_idx()],
+            2
+        );
+        assert_eq!(
+            sample_1_enablers_count.by_direction[Direction::Left.to_idx()],
+            1
+        );
+        assert_eq!(
+            sample_1_enablers_count.by_direction[Direction::Down.to_idx()],
+            2
+        );
+    }
+
+    #[test]
+    fn test_enablers_count_specific_2() {
+        let cs = CoreState::new("samples/ProcessExample.png", 3, 5, 5);
+
+        let sample_1 = find_sample_idx(
+            &cs.model,
+            vec![
+                [0, 0, 0],
+                [0, 0, 0],
+                [0, 0, 0],
+                [0, 0, 0],
+                [0, 0, 0],
+                [0, 0, 0],
+                [0, 0, 0],
+                [0, 0, 0],
+                [0, 0, 0],
+            ],
+        )
+        .unwrap();
+
+        let init_enablers_count = cs.model.get_initial_tile_enabler_counts();
+        let sample_1_enablers_count = &init_enablers_count[sample_1];
+
+        assert_eq!(
+            sample_1_enablers_count.by_direction[Direction::Up.to_idx()],
+            2
+        );
+        assert_eq!(
+            sample_1_enablers_count.by_direction[Direction::Right.to_idx()],
+            2
+        );
+        assert_eq!(
+            sample_1_enablers_count.by_direction[Direction::Left.to_idx()],
+            2
+        );
+        assert_eq!(
+            sample_1_enablers_count.by_direction[Direction::Down.to_idx()],
+            2
+        );
+
+        assert!(cs.model.adjacency_rule[sample_1][Direction::Down.to_idx()].contains(sample_1));
     }
 }
