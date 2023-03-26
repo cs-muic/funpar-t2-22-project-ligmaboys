@@ -1,5 +1,4 @@
 use super::vector2::Vector2;
-use std::fmt::{self, Debug};
 
 // Note: The attributes are public
 //
@@ -63,14 +62,6 @@ impl<T: Clone> Grid2D<T> {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn get_copy(&self, pos: Vector2) -> Option<T> {
-        match self.idx(pos) {
-            Some(index) => Some(self.data[index].clone()),
-            None => None,
-        }
-    }
-
     // MUTABLE BORROW
     // Given a Vector2 position, return the
     // element at the corresponding position.
@@ -81,8 +72,6 @@ impl<T: Clone> Grid2D<T> {
             None => None,
         }
     }
-
-    
 
     // Ensure that the position is valid (not out of bounds)
     #[allow(dead_code)]
@@ -95,22 +84,11 @@ impl<T: Clone> Grid2D<T> {
         self.width * self.height
     }
 
-    pub fn enumerate(&self) -> impl Iterator<Item=(Vector2, &T)> + '_  {
-        self.data.iter().enumerate().map(|(idx, t)| (self.to_coord(idx).unwrap(), t))
-    }
-
-
-}
-
-impl<T: Clone + Debug> Grid2D<T> {
-    pub fn print(&self) {
-        
-        for x in 0..self.width as i32 {
-            for y in 0..self.height as i32 {
-                print!("({:?})", self.get(Vector2 { y, x }));
-            }
-            println!();
-        }
+    pub fn enumerate(&self) -> impl Iterator<Item = (Vector2, &T)> + '_ {
+        self.data
+            .iter()
+            .enumerate()
+            .map(|(idx, t)| (self.to_coord(idx).unwrap(), t))
     }
 }
 

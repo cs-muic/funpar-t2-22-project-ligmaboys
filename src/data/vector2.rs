@@ -6,7 +6,6 @@ use super::direction::Direction;
 pub struct Vector2 {
     pub x: i32,
     pub y: i32,
-
 }
 
 impl Sub for Vector2 {

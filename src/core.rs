@@ -1,7 +1,8 @@
 use std::collections::{BinaryHeap, VecDeque};
 
 use crate::data::colour::Rgb;
-use crate::data::direction::{self, Direction, ALL_DIRECTIONS};
+
+use crate::data::direction::ALL_DIRECTIONS;
 use crate::data::vector2::Vector2;
 use crate::{data::grid2d::Grid2D, model::Model};
 
@@ -27,6 +28,7 @@ pub struct TileEnablerCount {
     pub by_direction: [usize; 4],
 }
 impl TileEnablerCount {
+    #[allow(dead_code)]
     pub fn contains_any_zero_count(&self) -> bool {
         self.by_direction.iter().any(|&count| count == 0)
     }
@@ -45,7 +47,7 @@ pub struct CoreCell {
 
     entropy_noise: f32,
 
-    is_collpased: bool,
+    pub is_collpased: bool,
 
     pub tile_enabler_counts: Vec<TileEnablerCount>,
 }
@@ -112,7 +114,7 @@ impl CoreCell {
         (self.sum_of_possible_tile_weights as f32).log2()
             - (self.sum_of_possible_tile_weight_log_weights
                 / self.sum_of_possible_tile_weights as f32)
-        // + self.entropy_noise
+            + self.entropy_noise
     }
 
     //
@@ -122,6 +124,19 @@ impl CoreCell {
     #[allow(dead_code)]
     pub fn remove_tile(&mut self, tile_index: TileIndex, model: &Model) {
         // Remove the tile
+
+        // println!(
+        //     "TILE REMOVING: {}, WEIGHT: {}",
+        //     tile_index,
+        //     model.get_relative_freq(tile_index).0
+        // );
+        // println!("TILE POSSIBLE: {:?}", self.possible);
+        // println!("TILE WEIGHTS: {}", self.sum_of_possible_tile_weights);
+        // println!(
+        //     "TILE NEXT WEIGTS: {}",
+        //     self.sum_of_possible_tile_weights - model.get_relative_freq(tile_index).0
+        // );
+
         self.possible.remove(tile_index);
 
         // Recalculate the entropy
@@ -161,6 +176,7 @@ impl CoreCell {
         unreachable!("sum_of_possible_weights was inconsistent with possible_tile_iter and FrequencyHints::relative_frequency");
     }
 
+    #[allow(dead_code)]
     fn has_no_possible_tiles(&self) -> bool {
         self.possible.is_empty()
     }
@@ -201,7 +217,17 @@ impl CoreState {
     pub fn process(path: &str, dimensions: usize, width: usize, height: usize) -> Vec<Rgb> {
         let mut corestate = CoreState::new(path, dimensions, width, height);
 
-        // dbg!(&corestate.model.freq_map);
+        // println!("INITIAL ENTROPY: {:?}", &corestate.entropy_heap);
+
+        // println!("=== RULES ===");
+        // for i in 0..corestate.model.samples.len() {
+        //     println!(
+        //         "Sample ID {} -> {{{:?}}} {:?}",
+        //         i, corestate.model.adjacency_rule[i], &corestate.model.samples[i]
+        //     );
+        // }
+        // println!();
+
         corestate.run();
 
         // Copy result into output grid
@@ -261,7 +287,7 @@ impl CoreState {
     fn distribute_entropy_noise(&mut self) {
         let mut rng = rand::thread_rng();
         self.grid.data.iter_mut().for_each(|cell: &mut CoreCell| {
-            cell.entropy_noise = rng.gen_range(0.0f32..0.0000001f32);
+            cell.entropy_noise = rng.gen();
         });
     }
 
@@ -275,7 +301,7 @@ impl CoreState {
 
             // If the cell hasn't been collapsed yet, we take it
             if !cell.is_collpased {
-                println!("COLLAPSED! -> {:?}", &entropy_coord.coord);
+                // println!("COLLAPSED! -> {:?}", &entropy_coord.coord);
                 return entropy_coord.coord;
             }
 
@@ -298,53 +324,10 @@ impl CoreState {
     #[allow(dead_code)]
     fn collapse_cell_at(&mut self, coord: Vector2) {
         // println!("collapsing: cell {:?}", coord);
-        // println!("collapsing: cell {}", self.grid.idx(coord).unwrap());
 
         let cell = self.grid.get_mut(coord).unwrap();
 
         let sample_index_chosen = cell.choose_sample_index(&self.model).unwrap();
-
-        println!(
-            "ENABLERS: {:?}",
-            cell.tile_enabler_counts[sample_index_chosen]
-        );
-
-        println!(
-            "Collapsed to: {:?}",
-            &self.model.samples[sample_index_chosen].region.data
-        );
-
-        for idx in &self.model.adjacency_rule[sample_index_chosen][Direction::Up.to_idx()] {
-            println!("UP CAN BE: {:?}", &self.model.samples[idx].region.data);
-        }
-        println!(
-            "Up size: {}\n",
-            self.model.adjacency_rule[sample_index_chosen][Direction::Up.to_idx()].len()
-        );
-
-        for idx in &self.model.adjacency_rule[sample_index_chosen][Direction::Right.to_idx()] {
-            println!("RIGHT CAN BE: {:?}", &self.model.samples[idx].region.data);
-        }
-        println!(
-            "Right size: {}\n",
-            self.model.adjacency_rule[sample_index_chosen][Direction::Right.to_idx()].len()
-        );
-
-        for idx in &self.model.adjacency_rule[sample_index_chosen][Direction::Down.to_idx()] {
-            println!("BOTTOM CAN BE: {:?}", &self.model.samples[idx].region.data);
-        }
-        println!(
-            "Down size: {}\n",
-            self.model.adjacency_rule[sample_index_chosen][Direction::Down.to_idx()].len()
-        );
-
-        for idx in &self.model.adjacency_rule[sample_index_chosen][Direction::Left.to_idx()] {
-            println!("LEFT CAN BE: {:?}", &self.model.samples[idx].region.data);
-        }
-        println!(
-            "Left size: {}\n",
-            self.model.adjacency_rule[sample_index_chosen][Direction::Left.to_idx()].len()
-        );
 
         // Set cell to collapsed
         cell.collapsed();
@@ -356,7 +339,7 @@ impl CoreState {
                 .push_back(RemovalUpdate { tile_index, coord });
         });
 
-        println!("INIT REMOVAL LIST: {:?}", &self.tile_removals);
+        // println!("INIT REMOVAL LIST: {:?}", &self.tile_removals);
 
         // Remove ALL other possibilities
         cell.possible.clear();
@@ -364,7 +347,7 @@ impl CoreState {
         // Add the only one posibility
         cell.possible.insert(sample_index_chosen);
 
-        println!("After collapse {:?}", &cell.possible);
+        // println!("After collapse {:?}", &cell.possible);
 
         // Note: We don't need to call remove_tile here because
         // we simply don't care about the tile's entropy anymore, there
@@ -376,9 +359,8 @@ impl CoreState {
     //
     #[allow(dead_code)]
     fn run(&mut self) {
-        let mut iter = 0;
         while self.remaining_uncollapsed_cells > 0 {
-            // dbg!(iter);
+            // println!("Iteration: {}", iter);
 
             // Choose the next lowest cell
             // which hasn't been collapsed yet
@@ -393,8 +375,6 @@ impl CoreState {
             // dbg!("FINISHED PROPAGATION");
 
             self.remaining_uncollapsed_cells -= 1;
-
-            iter += 1;
         }
     }
 
@@ -403,31 +383,6 @@ impl CoreState {
     //
     fn propagate(&mut self) {
         while let Some(removal_update) = self.tile_removals.pop_front() {
-            println!("====================================================================================================");
-            println!();
-            println!("{:?}", &removal_update);
-            println!();
-            for y in 0..self.grid.height as i32 {
-                for x in 0..self.grid.width as i32 {
-                    let possible = self.grid.get(Vector2 { x, y }).unwrap().possible.clone();
-                    let enablers: Vec<_> = possible
-                        .iter()
-                        .map(|idx| {
-                            self.grid.get(Vector2 { x, y }).unwrap().tile_enabler_counts[idx]
-                                .by_direction
-                        })
-                        .collect();
-
-                    let zipped = possible.iter().zip(enablers.iter()).collect::<Vec<_>>();
-
-                    print!(
-                        "{}",
-                        format!("{:width$}", format!("({:?})", zipped), width = 50)
-                    );
-                }
-                println!();
-            }
-
             'dir: for &direction in &ALL_DIRECTIONS {
                 // Propagate the effect to the neighbor in each direction
                 let neighbour_coord = removal_update.coord.neighbor(direction);
@@ -443,82 +398,88 @@ impl CoreState {
                 for compatible_tile in
                     self.model.adjacency_rule[removal_update.tile_index][direction.to_idx()].iter()
                 {
+                    // println!("====================================================================================================");
+                    // println!();
+                    // println!("{:?}", &removal_update);
+                    // println!();
+                    // for y in 0..self.grid.height as i32 {
+                    //     for x in 0..self.grid.width as i32 {
+                    //         let possible =
+                    //             self.grid.get(Vector2 { x, y }).unwrap().possible.clone();
+                    //         let enablers: Vec<_> = possible
+                    //             .iter()
+                    //             .map(|idx| {
+                    //                 self.grid.get(Vector2 { x, y }).unwrap().tile_enabler_counts
+                    //                     [idx]
+                    //                     .by_direction
+                    //             })
+                    //             .collect();
+
+                    //         let zipped = possible.iter().zip(enablers.iter()).collect::<Vec<_>>();
+
+                    //         print!(
+                    //             "{}",
+                    //             format!("{:width$}", format!("({:?})", zipped), width = 50)
+                    //         );
+                    //     }
+                    //     println!();
+                    // }
+
+                    // println!("DIRECTION: {:?}", direction);
+                    // println!("Compatible Tile: {:?}", compatible_tile);
+
                     let neighbor = self.grid.get_mut(neighbour_coord).unwrap();
 
                     let count = {
                         let count = &mut neighbor.tile_enabler_counts[compatible_tile].by_direction
                             [direction.opposite().to_idx()];
+
+                        // println!("CURRENT ENABLER COUNT: {}", count);
+                        // println!();
+
                         if *count == 0 {
                             continue;
                         }
+
                         *count -= 1;
                         *count
                     };
 
                     // If count is 0, we want to remove the tile from the neighbour
                     if count == 0 {
-                        
+                        if neighbor.is_collpased
+                            || neighbor.tile_enabler_counts[compatible_tile]
+                                .by_direction
+                                .iter()
+                                .enumerate()
+                                .filter(|(dir, _)| dir != &(direction.opposite().to_idx()))
+                                .map(|(_, v)| v)
+                                .any(|&v| v == 0)
+                        {
+                            // println!("AVOIDED CLASH");
+                            continue;
+                        }
+
+                        // println!("COORDS: {:?}", neighbour_coord);
                         self.grid
                             .get_mut(neighbour_coord)
                             .unwrap()
                             .remove_tile(compatible_tile, &self.model);
 
-                        self.entropy_heap.push(EntropyCoord {
+                        let entropy = EntropyCoord {
                             entropy: self.grid.get(neighbour_coord).unwrap().entropy(),
                             coord: neighbour_coord,
-                        });
+                        };
+                        // print!("NEW ENTROPY: {:?}", &entropy);
+                        self.entropy_heap.push(entropy);
 
                         self.tile_removals.push_back(RemovalUpdate {
                             tile_index: compatible_tile,
                             coord: neighbour_coord,
                         });
 
+                        // println!("QUEUED: {}, at {:?}", compatible_tile, neighbour_coord);
                     }
-
-                    // let opposite_direction = direction.opposite().to_idx();
-
-                    // // Look up the count of enablers
-                    // let enabler_counts = &mut neighbour_cell.tile_enabler_counts[compatible_tile];
-
-                    // if enabler_counts.by_direction[opposite_direction] == 1 {
-
-                    //     // Zero count in another direction means that
-                    //     // the tile has already been removed, we want
-                    //     // to avoid removing again.
-                    //     if !enabler_counts.contains_any_zero_count() {
-
-                    //         neighbour_cell.remove_tile(compatible_tile, &self.model);
-
-                    //         println!("Tile: {:?} has been removed from {:?}", compatible_tile, neighbour_coord);
-
-                    //         if neighbour_cell.has_no_possible_tiles() {
-
-                    //             panic!("Contradiction");
-                    //         }
-
-                    //         // dbg!(neighbour_cell.entropy());
-                    //         // println!("Lowest -> {:?}", self.entropy_heap.peek());
-
-                    //         self.entropy_heap.push(EntropyCoord {
-                    //             entropy: neighbour_cell.entropy(),
-                    //             coord: neighbour_coord,
-                    //         });
-
-                    //         // Add the update to the stack
-                    //         self.tile_removals.push(RemovalUpdate {
-                    //             tile_index: compatible_tile,
-                    //             coord: neighbour_coord,
-                    //         });
-                    //     }
-                    // }
-
-                    // let enabler_counts = &mut neighbour_cell.tile_enabler_counts[compatible_tile];
-
-                    // if enabler_counts.by_direction[opposite_direction] == 0 {
-                    //     continue;
-                    // }
-
-                    // enabler_counts.by_direction[opposite_direction] -= 1;
                 }
             }
         }
