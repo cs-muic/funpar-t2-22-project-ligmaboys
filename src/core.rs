@@ -125,18 +125,6 @@ impl CoreCell {
     pub fn remove_tile(&mut self, tile_index: TileIndex, model: &Model) {
         // Remove the tile
 
-        // println!(
-        //     "TILE REMOVING: {}, WEIGHT: {}",
-        //     tile_index,
-        //     model.get_relative_freq(tile_index).0
-        // );
-        // println!("TILE POSSIBLE: {:?}", self.possible);
-        // println!("TILE WEIGHTS: {}", self.sum_of_possible_tile_weights);
-        // println!(
-        //     "TILE NEXT WEIGTS: {}",
-        //     self.sum_of_possible_tile_weights - model.get_relative_freq(tile_index).0
-        // );
-
         self.possible.remove(tile_index);
 
         // Recalculate the entropy
@@ -217,17 +205,6 @@ impl CoreState {
     pub fn process(path: &str, dimensions: usize, width: usize, height: usize) -> Vec<Rgb> {
         let mut corestate = CoreState::new(path, dimensions, width, height);
 
-        // println!("INITIAL ENTROPY: {:?}", &corestate.entropy_heap);
-
-        // println!("=== RULES ===");
-        // for i in 0..corestate.model.samples.len() {
-        //     println!(
-        //         "Sample ID {} -> {{{:?}}} {:?}",
-        //         i, corestate.model.adjacency_rule[i], &corestate.model.samples[i]
-        //     );
-        // }
-        // println!();
-
         corestate.run();
 
         // Copy result into output grid
@@ -301,7 +278,6 @@ impl CoreState {
 
             // If the cell hasn't been collapsed yet, we take it
             if !cell.is_collpased {
-                // println!("COLLAPSED! -> {:?}", &entropy_coord.coord);
                 return entropy_coord.coord;
             }
 
@@ -323,8 +299,6 @@ impl CoreState {
     //
     #[allow(dead_code)]
     fn collapse_cell_at(&mut self, coord: Vector2) {
-        // println!("collapsing: cell {:?}", coord);
-
         let cell = self.grid.get_mut(coord).unwrap();
 
         let sample_index_chosen = cell.choose_sample_index(&self.model).unwrap();
@@ -339,15 +313,11 @@ impl CoreState {
                 .push_back(RemovalUpdate { tile_index, coord });
         });
 
-        // println!("INIT REMOVAL LIST: {:?}", &self.tile_removals);
-
         // Remove ALL other possibilities
         cell.possible.clear();
 
         // Add the only one posibility
         cell.possible.insert(sample_index_chosen);
-
-        // println!("After collapse {:?}", &cell.possible);
 
         // Note: We don't need to call remove_tile here because
         // we simply don't care about the tile's entropy anymore, there
@@ -360,8 +330,6 @@ impl CoreState {
     #[allow(dead_code)]
     fn run(&mut self) {
         while self.remaining_uncollapsed_cells > 0 {
-            // println!("Iteration: {}", iter);
-
             // Choose the next lowest cell
             // which hasn't been collapsed yet
             let next_coord = self.choose_next_cell();
@@ -371,8 +339,6 @@ impl CoreState {
 
             // Propagate the effects
             self.propagate();
-
-            // dbg!("FINISHED PROPAGATION");
 
             self.remaining_uncollapsed_cells -= 1;
         }
@@ -398,44 +364,11 @@ impl CoreState {
                 for compatible_tile in
                     self.model.adjacency_rule[removal_update.tile_index][direction.to_idx()].iter()
                 {
-                    // println!("====================================================================================================");
-                    // println!();
-                    // println!("{:?}", &removal_update);
-                    // println!();
-                    // for y in 0..self.grid.height as i32 {
-                    //     for x in 0..self.grid.width as i32 {
-                    //         let possible =
-                    //             self.grid.get(Vector2 { x, y }).unwrap().possible.clone();
-                    //         let enablers: Vec<_> = possible
-                    //             .iter()
-                    //             .map(|idx| {
-                    //                 self.grid.get(Vector2 { x, y }).unwrap().tile_enabler_counts
-                    //                     [idx]
-                    //                     .by_direction
-                    //             })
-                    //             .collect();
-
-                    //         let zipped = possible.iter().zip(enablers.iter()).collect::<Vec<_>>();
-
-                    //         print!(
-                    //             "{}",
-                    //             format!("{:width$}", format!("({:?})", zipped), width = 50)
-                    //         );
-                    //     }
-                    //     println!();
-                    // }
-
-                    // println!("DIRECTION: {:?}", direction);
-                    // println!("Compatible Tile: {:?}", compatible_tile);
-
                     let neighbor = self.grid.get_mut(neighbour_coord).unwrap();
 
                     let count = {
                         let count = &mut neighbor.tile_enabler_counts[compatible_tile].by_direction
                             [direction.opposite().to_idx()];
-
-                        // println!("CURRENT ENABLER COUNT: {}", count);
-                        // println!();
 
                         if *count == 0 {
                             continue;
@@ -456,11 +389,9 @@ impl CoreState {
                                 .map(|(_, v)| v)
                                 .any(|&v| v == 0)
                         {
-                            // println!("AVOIDED CLASH");
                             continue;
                         }
 
-                        // println!("COORDS: {:?}", neighbour_coord);
                         self.grid
                             .get_mut(neighbour_coord)
                             .unwrap()
@@ -470,15 +401,12 @@ impl CoreState {
                             entropy: self.grid.get(neighbour_coord).unwrap().entropy(),
                             coord: neighbour_coord,
                         };
-                        // print!("NEW ENTROPY: {:?}", &entropy);
                         self.entropy_heap.push(entropy);
 
                         self.tile_removals.push_back(RemovalUpdate {
                             tile_index: compatible_tile,
                             coord: neighbour_coord,
                         });
-
-                        // println!("QUEUED: {}, at {:?}", compatible_tile, neighbour_coord);
                     }
                 }
             }
