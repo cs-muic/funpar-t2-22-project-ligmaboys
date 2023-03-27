@@ -178,6 +178,12 @@ impl CoreCell {
     }
 }
 
+#[derive(Eq, PartialEq)]
+enum RunStatus {
+    Successed,
+    Failed,
+}
+
 #[derive(Debug)]
 pub struct CoreState {
     // Output grid
@@ -205,7 +211,16 @@ impl CoreState {
     pub fn process(path: &str, dimensions: usize, width: usize, height: usize) -> Vec<Rgb> {
         let mut corestate = CoreState::new(path, dimensions, width, height);
 
-        corestate.run();
+        use std::time::Instant;
+        let now = Instant::now();
+        let elapsed = now.elapsed();
+        let mut run_status = RunStatus::Failed;
+        while run_status != RunStatus::Successed {
+            println!("running...");
+            corestate = CoreState::new(path, dimensions, width, height);
+            run_status = corestate.run();
+            println!("Elapsed: {:.2?}", elapsed);
+        }
 
         // Copy result into output grid
 
@@ -298,10 +313,16 @@ impl CoreState {
     // Collapse the cell at the given position.
     //
     #[allow(dead_code)]
-    fn collapse_cell_at(&mut self, coord: Vector2) {
+    fn collapse_cell_at(&mut self, coord: Vector2) -> RunStatus {
         let cell = self.grid.get_mut(coord).unwrap();
 
-        let sample_index_chosen = cell.choose_sample_index(&self.model).unwrap();
+        let sample_index_chosen = cell
+            .choose_sample_index(&self.model)
+            .unwrap_or(self.model.size() + 1);
+
+        if sample_index_chosen == self.model.size() + 1 {
+            return RunStatus::Failed;
+        }
 
         // Set cell to collapsed
         cell.collapsed();
@@ -322,26 +343,33 @@ impl CoreState {
         // Note: We don't need to call remove_tile here because
         // we simply don't care about the tile's entropy anymore, there
         // is no point in recalculating it.
+        RunStatus::Successed
     }
 
     //
     // Basic search and kill loop
     //
     #[allow(dead_code)]
-    fn run(&mut self) {
+    fn run(&mut self) -> RunStatus {
         while self.remaining_uncollapsed_cells > 0 {
             // Choose the next lowest cell
             // which hasn't been collapsed yet
             let next_coord = self.choose_next_cell();
 
             // Collapse the chosen cell
-            self.collapse_cell_at(next_coord);
+            let collapse_status = self.collapse_cell_at(next_coord);
+
+            match collapse_status {
+                RunStatus::Failed => return RunStatus::Failed,
+                RunStatus::Successed => {
+                    self.propagate();
+                    self.remaining_uncollapsed_cells -= 1;
+                }
+            }
 
             // Propagate the effects
-            self.propagate();
-
-            self.remaining_uncollapsed_cells -= 1;
         }
+        RunStatus::Successed
     }
 
     //

@@ -14,11 +14,7 @@ fn main() {
     // Parse CLI <ImgPath> <Shape> <OutputWidth> <OutputHeight>
     let args: Args = Args::parse();
 
-    use std::time::Instant;
-    let now = Instant::now();
     let ans = CoreState::process(&args.img_path, args.n_dimensions, args.width, args.height);
-    let elapsed = now.elapsed();
-    println!("Elapsed: {:.2?}", elapsed);
     let w = ans
         .iter()
         .flat_map(|arr| vec![arr[0], arr[1], arr[2]])
