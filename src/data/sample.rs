@@ -26,6 +26,7 @@ impl Sample {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_rotations(&self) -> Vec<Sample> {
         vec![
             self.clone(),
@@ -35,6 +36,7 @@ impl Sample {
         ]
     }
 
+    #[allow(dead_code)]
     pub fn rev_sample(&self) -> Sample {
         let rev_grid_data = self.region.clone().data.into_iter().rev().collect();
         Sample {
@@ -46,6 +48,7 @@ impl Sample {
         }
     }
 
+    #[allow(dead_code)]
     pub fn transpose_sample(&self) -> Sample {
         let mut transposed = vec![[0u8, 0u8, 0u8]; self.region.size()];
         transpose::transpose(
@@ -63,6 +66,7 @@ impl Sample {
         }
     }
 
+    #[allow(dead_code)]
     pub fn rev_sample_y(&self) -> Sample {
         let transposed = self.clone().transpose_sample();
         let reversed_y = transposed
@@ -76,6 +80,39 @@ impl Sample {
                 width: self.region.width,
                 height: self.region.height,
                 data: reversed_y,
+            },
+        }
+    }
+
+    pub fn rotate(&self) -> Vec<Sample> {
+        let mut rotations = vec![self.clone()];
+        let mut rotate = self.clone();
+        for _n in 0..3 {
+            rotate = rotate.rotate_90();
+            rotations.push(rotate.clone());
+        }
+        rotations
+    }
+
+    pub fn rotate_90(&self) -> Sample {
+        let data = self.clone().transpose_sample().region.data;
+        let mut rotated = data;
+        rotated = (0..self.region.width)
+            .into_iter()
+            .flat_map(|row| {
+                rotated[(row * self.region.height)..(row * self.region.height) + self.region.height]
+                    .iter()
+                    .copied()
+                    .rev()
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        Sample {
+            region: Grid2D {
+                width: self.region.width,
+                height: self.region.height,
+                data: rotated,
             },
         }
     }
@@ -147,6 +184,66 @@ impl Sample {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_rotate() {
+        let s1: Sample = Sample {
+            region: Grid2D {
+                width: 3,
+                height: 3,
+                data: [
+                    [0, 0, 0],
+                    [136, 136, 255],
+                    [0, 0, 0],
+                    [0, 0, 0],
+                    [136, 136, 255],
+                    [0, 0, 0],
+                    [136, 136, 255],
+                    [136, 136, 255],
+                    [136, 136, 255],
+                ]
+                .to_vec(),
+            },
+        };
+        let s2: Sample = Sample {
+            region: Grid2D {
+                width: 3,
+                height: 3,
+                data: [
+                    [136, 136, 255],
+                    [0, 0, 0],
+                    [0, 0, 0],
+                    [136, 136, 255],
+                    [136, 136, 255],
+                    [136, 136, 255],
+                    [136, 136, 255],
+                    [0, 0, 0],
+                    [0, 0, 0],
+                ]
+                .to_vec(),
+            },
+        };
+        let s3: Sample = Sample {
+            region: Grid2D {
+                width: 3,
+                height: 3,
+                data: [
+                    [136, 136, 255],
+                    [136, 136, 255],
+                    [136, 136, 255],
+                    [0, 0, 0],
+                    [136, 136, 255],
+                    [0, 0, 0],
+                    [0, 0, 0],
+                    [136, 136, 255],
+                    [0, 0, 0],
+                ]
+                .to_vec(),
+            },
+        };
+        assert_eq!(s1.rotate_90(), s2);
+        assert_eq!(s1.rotate_90().rotate_90(), s3);
+    }
 
     #[test]
     fn test_eq() {

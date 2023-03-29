@@ -7,4 +7,6 @@ pub struct Args {
     pub n_dimensions: usize,
     pub width: usize,
     pub height: usize,
+    #[arg(long)]
+    pub rotation: bool,
 }

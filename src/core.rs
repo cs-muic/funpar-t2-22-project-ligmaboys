@@ -208,8 +208,14 @@ impl CoreState {
         self.remaining_uncollapsed_cells == 0
     }
 
-    pub fn process(path: &str, dimensions: usize, width: usize, height: usize) -> Vec<Rgb> {
-        let mut corestate = CoreState::new(path, dimensions, width, height);
+    pub fn process(
+        path: &str,
+        dimensions: usize,
+        width: usize,
+        height: usize,
+        rotation: bool,
+    ) -> Vec<Rgb> {
+        let mut corestate = CoreState::new(path, dimensions, width, height, rotation);
 
         use std::time::Instant;
         let now = Instant::now();
@@ -217,7 +223,7 @@ impl CoreState {
         let mut run_status = RunStatus::Failed;
         while run_status != RunStatus::Successed {
             println!("running...");
-            corestate = CoreState::new(path, dimensions, width, height);
+            corestate = CoreState::new(path, dimensions, width, height, rotation);
             run_status = corestate.run();
             println!("Elapsed: {:.2?}", elapsed);
         }
@@ -239,8 +245,14 @@ impl CoreState {
             .collect()
     }
 
-    pub fn new(path: &str, dimensions: usize, width: usize, height: usize) -> CoreState {
-        let model = Model::create(path, dimensions);
+    pub fn new(
+        path: &str,
+        dimensions: usize,
+        width: usize,
+        height: usize,
+        rotation: bool,
+    ) -> CoreState {
+        let model = Model::create(path, dimensions, rotation);
         let grid = Grid2D::init(width, height, CoreCell::new(model.size(), &model));
         let remaining_uncollapsed_cells = grid.size();
 
@@ -467,7 +479,7 @@ mod tests {
     #[test]
     fn test_removal_entropy() {
         for _ in 0..10 {
-            let mut cs = CoreState::new("samples/Flowers.png", 3, 10, 10);
+            let mut cs = CoreState::new("samples/Flowers.png", 3, 10, 10, false);
 
             // For Sample ID
             let target_sample = &cs.model.samples[0];
@@ -483,7 +495,7 @@ mod tests {
                 .collect::<Vec<_>>();
 
             // Cached Version
-            let mut cs2 = CoreState::new("samples/Flowers.png", 3, 10, 10);
+            let mut cs2 = CoreState::new("samples/Flowers.png", 3, 10, 10, false);
             let sample_id = find_sample_idx(&cs2.model, target_sample.region.data.clone()).unwrap();
 
             assert_eq!(
@@ -523,7 +535,7 @@ mod tests {
     //
     #[test]
     fn test_binary_heap() {
-        let mut cs = CoreState::new("samples/Flowers.png", 3, 50, 50);
+        let mut cs = CoreState::new("samples/Flowers.png", 3, 50, 50, false);
 
         for _ in 0..cs.grid.size() {
             let least_entropy = &cs.entropy_heap.peek();
@@ -534,7 +546,7 @@ mod tests {
 
     #[test]
     fn test_basic_collapse() {
-        let mut cs = CoreState::new("samples/Flowers.png", 3, 3, 3);
+        let mut cs = CoreState::new("samples/Flowers.png", 3, 3, 3, false);
 
         // Check that the same collapsed cell is never visited again
         let mut positions_collapsed = bit_set::BitSet::new();
@@ -571,7 +583,7 @@ mod tests {
 
     #[test]
     fn test_enablers_count() {
-        let cs = CoreState::new("samples/Flowers.png", 3, 5, 5);
+        let cs = CoreState::new("samples/Flowers.png", 3, 5, 5, false);
 
         let init_enablers_count = cs.model.get_initial_tile_enabler_counts();
 
@@ -582,7 +594,7 @@ mod tests {
 
     #[test]
     fn test_enablers_count_specific() {
-        let cs = CoreState::new("samples/ProcessExample.png", 3, 5, 5);
+        let cs = CoreState::new("samples/ProcessExample.png", 3, 5, 5, false);
 
         let sample_1 = find_sample_idx(
             &cs.model,
@@ -623,7 +635,7 @@ mod tests {
 
     #[test]
     fn test_enablers_count_specific_2() {
-        let cs = CoreState::new("samples/ProcessExample.png", 3, 5, 5);
+        let cs = CoreState::new("samples/ProcessExample.png", 3, 5, 5, false);
 
         let sample_1 = find_sample_idx(
             &cs.model,

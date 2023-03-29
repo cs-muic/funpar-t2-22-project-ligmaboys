@@ -20,7 +20,7 @@ impl Model {
         self.freq_map[sample_id].1
     }
 
-    pub fn create(img_path: &str, n_dimensions: usize) -> Model {
+    pub fn create(img_path: &str, n_dimensions: usize, rotation: bool) -> Model {
         // Parse CLI <ImgPath> <Shape>
 
         // Load image from args passed in
@@ -32,10 +32,12 @@ impl Model {
 
         // Retrieve image samples (includes duplicates)
         let mut unprocessed_samples = image.sample(n_dimensions as i32);
-        unprocessed_samples = unprocessed_samples
-            .iter()
-            .flat_map(|sample| sample.get_rotations())
-            .collect();
+        if rotation {
+            unprocessed_samples = unprocessed_samples
+                .iter()
+                .flat_map(|sample| sample.rotate())
+                .collect();
+        }
 
         // Calculate the number of times each unique sample appears
         let freq_map: HashMap<Sample, i32> = unprocessed_samples.iter().fold(
@@ -143,7 +145,7 @@ mod tests {
     fn check_valid_model() {
         use super::*;
         use crate::data::direction::Direction;
-        let model = Model::create("samples/ProcessExampleLong.png", 3);
+        let model = Model::create("samples/ProcessExampleLong.png", 3, false);
         assert!(model.size() == 16);
 
         let sample_1 = find_sample_idx(

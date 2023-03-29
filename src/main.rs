@@ -14,7 +14,13 @@ fn main() {
     // Parse CLI <ImgPath> <Shape> <OutputWidth> <OutputHeight>
     let args: Args = Args::parse();
 
-    let ans = CoreState::process(&args.img_path, args.n_dimensions, args.width, args.height);
+    let ans = CoreState::process(
+        &args.img_path,
+        args.n_dimensions,
+        args.width,
+        args.height,
+        args.rotation,
+    );
     let w = ans
         .iter()
         .flat_map(|arr| vec![arr[0], arr[1], arr[2]])
