@@ -34,7 +34,7 @@ impl Model {
         let mut unprocessed_samples = image.sample(n_dimensions as i32);
         unprocessed_samples = unprocessed_samples
             .iter()
-            .flat_map(|sample| vec![sample.clone(), sample.rev_sample()])
+            .flat_map(|sample| sample.get_rotations())
             .collect();
 
         // Calculate the number of times each unique sample appears

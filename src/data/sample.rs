@@ -26,6 +26,15 @@ impl Sample {
         }
     }
 
+    pub fn get_rotations(&self) -> Vec<Sample> {
+        vec![
+            self.clone(),
+            self.rev_sample(),
+            self.transpose_sample(),
+            self.rev_sample_y(),
+        ]
+    }
+
     pub fn rev_sample(&self) -> Sample {
         let rev_grid_data = self.region.clone().data.into_iter().rev().collect();
         Sample {
@@ -33,6 +42,40 @@ impl Sample {
                 width: self.region.width,
                 height: self.region.height,
                 data: rev_grid_data,
+            },
+        }
+    }
+
+    pub fn transpose_sample(&self) -> Sample {
+        let mut transposed = vec![[0u8, 0u8, 0u8]; self.region.size()];
+        transpose::transpose(
+            &self.region.data,
+            &mut transposed,
+            self.region.width,
+            self.region.height,
+        );
+        Sample {
+            region: Grid2D {
+                width: self.region.width,
+                height: self.region.height,
+                data: transposed,
+            },
+        }
+    }
+
+    pub fn rev_sample_y(&self) -> Sample {
+        let transposed = self.clone().transpose_sample();
+        let reversed_y = transposed
+            .region
+            .data
+            .iter()
+            .map(|[r, g, b]| [*b, *g, *r])
+            .collect();
+        Sample {
+            region: Grid2D {
+                width: self.region.width,
+                height: self.region.height,
+                data: reversed_y,
             },
         }
     }
