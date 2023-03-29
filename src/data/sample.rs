@@ -26,6 +26,17 @@ impl Sample {
         }
     }
 
+    pub fn rev_sample(&self) -> Sample {
+        let rev_grid_data = self.region.clone().data.into_iter().rev().collect();
+        Sample {
+            region: Grid2D {
+                width: self.region.width,
+                height: self.region.height,
+                data: rev_grid_data,
+            },
+        }
+    }
+
     #[allow(dead_code)]
     pub fn get_top_left_pixel(&self) -> Rgb {
         *self.region.get(Vector2 { x: 0, y: 0 }).unwrap()
