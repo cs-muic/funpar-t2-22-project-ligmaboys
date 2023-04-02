@@ -14,7 +14,7 @@ fn main() {
     // Parse CLI <ImgPath> <Shape> <OutputWidth> <OutputHeight>
     let args: Args = Args::parse();
 
-    let ans = CoreState::process(
+    let ans = CoreState::par_process(
         &args.img_path,
         args.n_dimensions,
         args.width,

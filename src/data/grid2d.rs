@@ -11,6 +11,26 @@ pub struct Grid2D<T> {
 }
 
 impl<T: Clone> Grid2D<T> {
+    pub fn clone_range(&self, origin: Vector2, size: Vector2) -> Grid2D<T> {
+        let in_range = |pos: Vector2| {
+            pos.x >= origin.x
+                && pos.y >= origin.y
+                && pos.x < (origin.x + size.x)
+                && pos.y < (origin.y + size.y)
+        };
+
+        Grid2D {
+            width: size.x as usize,
+            height: size.y as usize,
+            data: self
+                .data
+                .iter()
+                .enumerate()
+                .filter(|(idx, _)| in_range(self.to_coord(*idx).unwrap()))
+                .map(|(_, e)| e.clone())
+                .collect(),
+        }
+    }
     pub fn init(width: usize, height: usize, init_val: T) -> Grid2D<T> {
         let new_data = vec![init_val; width * height];
         Grid2D {

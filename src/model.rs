@@ -8,7 +8,7 @@ extern crate bit_set;
 extern crate image;
 use crate::image_reader;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Model {
     pub samples: Vec<Sample>,
     pub freq_map: Vec<(SampleID, (u32, f32))>,

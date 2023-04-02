@@ -203,11 +203,150 @@ pub struct CoreState {
 }
 
 impl CoreState {
+    pub fn forced_collapse(&mut self, position: Vector2) -> RunStatus {
+        // Choose the next lowest cell
+        // which hasn't been collapsed yet
+        let next_coord = position;
+
+        // Collapse the chosen cell
+        let collapse_status = self.collapse_cell_at(next_coord);
+
+        match collapse_status {
+            RunStatus::Failed => return RunStatus::Failed,
+            RunStatus::Successed => {
+                self.propagate();
+                self.remaining_uncollapsed_cells -= 1;
+            }
+        }
+
+        // Propagate the effects
+        RunStatus::Successed
+    }
+
+    pub fn collapse_middle(&mut self) -> (CoreState, CoreState) {
+        let sample_size = self.model.samples[0].region.width;
+        let middle = self.grid.width / 2;
+        let x = middle - sample_size / 2;
+        for y in 0..self.grid.height {
+            for x in x..x + sample_size {
+                self.forced_collapse(Vector2 {
+                    x: x as i32,
+                    y: y as i32,
+                });
+            }
+        }
+        let left_entropy = self
+            .entropy_heap
+            .clone()
+            .iter()
+            .filter(|entropy| entropy.coord.x < middle as i32)
+            .cloned()
+            .collect::<BinaryHeap<_>>();
+        let right_entropy = self
+            .entropy_heap
+            .clone()
+            .iter()
+            .filter(|entropy| entropy.coord.x > middle as i32)
+            .cloned()
+            .map(|entropy| EntropyCoord {
+                entropy: entropy.entropy,
+                coord: Vector2 {
+                    x: entropy.coord.x - middle as i32,
+                    y: entropy.coord.y,
+                },
+            })
+            .collect::<BinaryHeap<_>>();
+        let left_grid = self.grid.clone_range(
+            Vector2 { x: 0, y: 0 },
+            Vector2 {
+                x: middle as i32,
+                y: self.grid.height as i32,
+            },
+        );
+        let right_grid = self.grid.clone_range(
+            Vector2 {
+                x: middle as i32,
+                y: 0,
+            },
+            Vector2 {
+                x: middle as i32,
+                y: self.grid.height as i32,
+            },
+        );
+        let left_remains = left_grid
+            .data
+            .iter()
+            .filter(|cell| !cell.is_collpased)
+            .count();
+        let right_remains = right_grid
+            .data
+            .iter()
+            .filter(|cell| !cell.is_collpased)
+            .count();
+        let left_cs = CoreState {
+            grid: left_grid,
+            remaining_uncollapsed_cells: left_remains,
+            model: self.model.clone(),
+            entropy_heap: left_entropy,
+            tile_removals: VecDeque::new(),
+        };
+        let right_cs = CoreState {
+            grid: right_grid,
+            remaining_uncollapsed_cells: right_remains,
+            model: self.model.clone(),
+            entropy_heap: right_entropy,
+            tile_removals: VecDeque::new(),
+        };
+        (left_cs, right_cs)
+    }
+
     #[allow(dead_code)]
     pub fn is_collpased(&self) -> bool {
         self.remaining_uncollapsed_cells == 0
     }
 
+    pub fn par_process(
+        path: &str,
+        dimensions: usize,
+        width: usize,
+        height: usize,
+        rotation: bool,
+    ) -> Vec<Rgb> {
+        let mut corestate = CoreState::new(path, dimensions, width, height, rotation);
+        let (mut left, mut right) = corestate.collapse_middle();
+
+        use std::time::Instant;
+        left.run();
+        right.run();
+
+        // Copy result into output grid
+
+        let mut output_grid = Grid2D::init(width, height, 0);
+
+        for (coord, cell) in left.grid.enumerate() {
+            if let Some(tile_index) = cell.get_the_only_possible_tile_index() {
+                output_grid.set(coord, tile_index);
+            }
+        }
+
+        for (coord, cell) in right.grid.enumerate() {
+            if let Some(tile_index) = cell.get_the_only_possible_tile_index() {
+                output_grid.set(
+                    Vector2 {
+                        x: coord.x as i32 + (width / 2) as i32,
+                        y: coord.y,
+                    },
+                    tile_index,
+                );
+            }
+        }
+
+        output_grid
+            .data
+            .iter()
+            .map(|&sample_id| corestate.model.samples[sample_id].get_top_left_pixel())
+            .collect()
+    }
     pub fn process(
         path: &str,
         dimensions: usize,
