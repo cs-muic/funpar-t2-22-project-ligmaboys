@@ -230,26 +230,46 @@ impl CoreState {
         RunStatus::Succeeded
     }
 
-    pub fn collapse_middle(&mut self) -> (CoreState, CoreState) {
+    pub fn collapse_middle(&mut self) -> (CoreState, CoreState, CoreState, CoreState) {
         let sample_size = self.model.samples[0].region.width;
         let middle = self.grid.width / 2;
-        let x = middle - sample_size / 2;
+        let vertical_middle = self.grid.height /2;
+
+        let x = middle - ((sample_size / 2) + 1);
+        let y = vertical_middle - ((sample_size / 2) + 1);
 
         let mut left_entropy = BinaryHeap::<EntropyCoord>::new();
+        let mut left_bottom_entropy = BinaryHeap::<EntropyCoord>::new();
         let mut right_entropy = BinaryHeap::<EntropyCoord>::new();
+        let mut right_bottom_entropy = BinaryHeap::<EntropyCoord>::new();
 
-        for y in 0..self.grid.height {
-            for x in x..x + sample_size {
-                self.forced_collapse(Vector2 {
-                    x: x as i32,
-                    y: y as i32,
-                });
+
+        for pos_y in 0..self.grid.height {
+            for pos_x in 0..self.grid.width {
+
+                // Vertical strip
+                if pos_x > x+1 && pos_x <= x+sample_size-1 {
+
+                    self.forced_collapse(Vector2 {
+                        x: pos_x as i32,
+                        y: pos_y as i32,
+                    });
+                // // Horizontal Strip
+                } else if pos_y > y+1 && pos_y <= y+sample_size-1 {
+                    self.forced_collapse(Vector2 {
+                        x: pos_x as i32,
+                        y: pos_y as i32,
+                    });
+                } else {
+                }
             }
         }
 
+
         for y in 0..self.grid.height {
             for x in 0..self.grid.width {
-                if x < middle {
+                // top left
+                if x < middle && y < vertical_middle { 
                     left_entropy.push(EntropyCoord {
                         entropy: self
                             .grid
@@ -264,7 +284,24 @@ impl CoreState {
                             y: y as i32,
                         },
                     });
-                } else {
+                // bottom left
+                } else if x < middle && y > vertical_middle {
+                    left_bottom_entropy.push(EntropyCoord {
+                        entropy: self
+                            .grid
+                            .get(Vector2 {
+                                x: x as i32,
+                                y: y as i32,
+                            })
+                            .unwrap()
+                            .entropy(),
+                        coord: Vector2 {
+                            x: x as i32,
+                            y: (y - vertical_middle) as i32,
+                        },
+                    });
+                // top right
+                } else if x > middle && y < vertical_middle {
                     right_entropy.push(EntropyCoord {
                         entropy: self
                             .grid
@@ -279,52 +316,72 @@ impl CoreState {
                             y: y as i32,
                         },
                     });
-                }
+                // bottom right
+                } else if x > middle && y > vertical_middle {
+                    right_bottom_entropy.push(EntropyCoord {
+                        entropy: self
+                            .grid
+                            .get(Vector2 {
+                                x: x as i32,
+                                y: y as i32,
+                            })
+                            .unwrap()
+                            .entropy(),
+                        coord: Vector2 {
+                            x: (x - middle) as i32,
+                            y: (y - vertical_middle) as i32,
+                        },
+                    });
+
+                    
+                } 
             }
         }
 
-        let left_grid = self.grid.clone_range(
-            Vector2 { x: 0, y: 0 },
+
+        let make_grid = |o_x, o_y, s_x, s_y| { self.grid.clone_range(
+            Vector2 { x: o_x, y: o_y },
             Vector2 {
-                x: middle as i32,
-                y: self.grid.height as i32,
-            },
-        );
-        let right_grid = self.grid.clone_range(
-            Vector2 {
-                x: middle as i32,
-                y: 0,
-            },
-            Vector2 {
-                x: middle as i32,
-                y: self.grid.height as i32,
-            },
-        );
-        let left_remains = left_grid
-            .data
+                x: s_x,
+                y: s_y,
+            }
+        )
+    };
+
+        let left_grid = make_grid(0, 0, middle as i32, vertical_middle as i32);
+        let left_bottom_grid = make_grid(0, vertical_middle as i32, middle as i32, vertical_middle as i32);
+        let right_grid = make_grid(middle as i32, 0, middle as i32, vertical_middle as i32);
+        let right_bottom_grid = make_grid(middle as i32, vertical_middle as i32, middle as i32, vertical_middle as i32);
+
+
+        let get_remaining = |grid: &Grid2D<CoreCell>| { grid.data
             .iter()
             .filter(|cell| !cell.is_collpased)
-            .count();
-        let right_remains = right_grid
-            .data
-            .iter()
-            .filter(|cell| !cell.is_collpased)
-            .count();
-        let left_cs = CoreState {
-            grid: left_grid,
-            remaining_uncollapsed_cells: left_remains,
-            model: self.model.clone(),
-            entropy_heap: left_entropy,
-            tile_removals: VecDeque::new(),
+            .count() };
+
+
+
+        let left_remains = get_remaining(&left_grid);
+        let left_bottom_remains = get_remaining(&left_bottom_grid);
+        let right_remains = get_remaining(&right_grid);
+        let right_bottom_remains = get_remaining(&right_bottom_grid);
+
+        let make_cs = |grid, remain, entropy| -> CoreState {
+            CoreState {
+                grid,
+                remaining_uncollapsed_cells: remain,
+                model: self.model.clone(),
+                entropy_heap: entropy,
+                tile_removals: VecDeque::new(),
+            }
         };
-        let right_cs = CoreState {
-            grid: right_grid,
-            remaining_uncollapsed_cells: right_remains,
-            model: self.model.clone(),
-            entropy_heap: right_entropy,
-            tile_removals: VecDeque::new(),
-        };
-        (left_cs, right_cs)
+
+        let left_cs = make_cs(left_grid, left_remains, left_entropy);
+        let left_bottom_cs = make_cs(left_bottom_grid, left_bottom_remains, left_bottom_entropy);
+        let right_cs = make_cs(right_grid, right_remains, right_entropy);
+        let right_bottom_cs = make_cs(right_bottom_grid, right_bottom_remains, right_bottom_entropy);
+    
+        (left_cs, right_cs, left_bottom_cs, right_bottom_cs)
     }
 
     #[allow(dead_code)]
@@ -339,6 +396,7 @@ impl CoreState {
         height: usize,
         rotation: bool,
     ) -> Vec<Rgb> {
+
         println!("Image Processing...");
 
         let model_creation_time = Instant::now();
@@ -349,16 +407,30 @@ impl CoreState {
         );
 
         let model_split = Instant::now();
-        let (mut left, mut right) = corestate.collapse_middle();
+        let (mut left, mut right, mut left_bottom, mut right_bottom) = corestate.collapse_middle();
         println!("Model Split Elapsed Time: {:.2?}", model_split.elapsed());
 
-        println!();
+
+        println!(); 
 
         let compute_time = Instant::now();
 
-        let (left, right) = rayon::join(|| left.restart(), || right.restart());
+        let grid_res: Vec<_> = vec![left, right, left_bottom, right_bottom].par_iter_mut().map(|cs| cs.restart()).collect();
 
-        println!("Computation Elapsed Time: {:.2?}", compute_time.elapsed());
+        let left = &grid_res[0];
+        let right = &grid_res[1];
+        let left_bottom = &grid_res[2];
+        let right_bottom =  &grid_res[3];
+
+
+
+
+        // let left_bottom = left_bottom.restart();
+
+        println!(
+            "Computation Elapsed Time: {:.2?}",
+            compute_time.elapsed()
+        );
 
         // Copy result into output grid
 
@@ -382,6 +454,30 @@ impl CoreState {
             }
         }
 
+        for (coord, cell) in left_bottom.enumerate() {
+            if let Some(tile_index) = cell.get_the_only_possible_tile_index() {
+                output_grid.set(
+                    Vector2 {
+                        x: coord.x,
+                        y: coord.y as i32 + (height / 2) as i32,
+                    },
+                    tile_index,
+                );
+            }
+        }
+
+        for (coord, cell) in right_bottom.enumerate() {
+            if let Some(tile_index) = cell.get_the_only_possible_tile_index() {
+                output_grid.set(
+                    Vector2 {
+                        x: coord.x as i32 + (width / 2) as i32,
+                        y: coord.y as i32 + (height / 2) as i32,
+                    },
+                    tile_index,
+                );
+            }
+        }
+
         output_grid
             .data
             .iter()
@@ -393,10 +489,11 @@ impl CoreState {
         let snapshot = self.clone();
         let mut count = 1;
         loop {
-            let mut candidates = vec![snapshot.clone(); 8];
+            let mut candidates = vec![snapshot.clone(); 4];
             let candidates_result = candidates
                 .par_iter_mut()
                 .flat_map(|candidate| {
+                    
                     let (status, grid) = candidate.run();
 
                     if status == RunStatus::Succeeded {
@@ -404,6 +501,7 @@ impl CoreState {
                     } else {
                         Err(())
                     }
+
                 })
                 .find_any(|_| true);
 
