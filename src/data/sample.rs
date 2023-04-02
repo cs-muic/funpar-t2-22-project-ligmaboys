@@ -98,7 +98,6 @@ impl Sample {
         let data = self.clone().transpose_sample().region.data;
         let mut rotated = data;
         rotated = (0..self.region.width)
-            .into_iter()
             .flat_map(|row| {
                 rotated[(row * self.region.height)..(row * self.region.height) + self.region.height]
                     .iter()

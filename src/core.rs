@@ -661,7 +661,7 @@ mod tests {
             assert!(approx_equal(
                 non_cached_entropy[0] as f64,
                 cached_entropy[0] as f64,
-                1
+                0
             ))
         }
     }
