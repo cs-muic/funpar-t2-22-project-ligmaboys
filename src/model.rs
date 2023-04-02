@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use rayon::prelude::{IntoParallelRefIterator, IntoParallelIterator, ParallelIterator};
+use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::core::TileEnablerCount;
 use crate::data::direction::{Direction, ALL_DIRECTIONS};

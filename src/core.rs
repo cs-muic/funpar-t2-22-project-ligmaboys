@@ -8,7 +8,7 @@ use crate::{data::grid2d::Grid2D, model::Model};
 
 use crate::entropy_coord::EntropyCoord;
 use rand::Rng;
-use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator, IntoParallelRefMutIterator};
 
 #[allow(dead_code)]
 pub type TileIndex = usize;
@@ -349,18 +349,20 @@ impl CoreState {
     pub fn restart(&mut self) -> Grid2D<CoreCell> {
         use std::time::Instant;
         let now = Instant::now();
-        let mut snapshot = self.clone();
-        let mut grid = Grid2D::init(1, 1, CoreCell::new(1, &self.model));
-        let mut run_status = RunStatus::Failed;
-        let mut count = 0;
-        while run_status != RunStatus::Successed {
-            snapshot = self.clone();
-            (run_status, grid) = snapshot.run();
+        let snapshot = self.clone();
+        let mut count = 1;
+        let mut candidates = vec![snapshot; 4];
+        loop {
+            let candidates_result = candidates
+                .par_iter_mut().map(|candidate| candidate.run()).filter(|(stat, _)| *stat == RunStatus::Successed).collect::<Vec<_>>();
+            if !candidates_result.is_empty() {
+                let elapsed = now.elapsed();
+                println!("Count: {}, Elapsed: {:.2?}", count, elapsed);
+                return candidates_result[0].1.clone();
+            }
             count += 1;
-        }
-        let elapsed = now.elapsed();
-        println!("Count: {}, Elapsed: {:.2?}", count, elapsed);
-        return grid;
+        } 
+
     }
     pub fn process(
         path: &str,
@@ -368,7 +370,7 @@ impl CoreState {
         width: usize,
         height: usize,
         rotation: bool,
-    ) -> Vec<Rgb> {
+        ) -> Vec<Rgb> {
         let mut corestate = CoreState::new(path, dimensions, width, height, rotation);
 
         use std::time::Instant;
@@ -405,7 +407,7 @@ impl CoreState {
         width: usize,
         height: usize,
         rotation: bool,
-    ) -> CoreState {
+        ) -> CoreState {
         let model = Model::create(path, dimensions, rotation);
         let grid = Grid2D::init(width, height, CoreCell::new(model.size(), &model));
         let remaining_uncollapsed_cells = grid.size();
@@ -467,11 +469,11 @@ impl CoreState {
 
         // Remaining cells > 0 but heap is empty...
         dbg!(&self
-            .grid
-            .data
-            .iter()
-            .filter(|v| v.possible.len() != 1)
-            .count());
+             .grid
+             .data
+             .iter()
+             .filter(|v| v.possible.len() != 1)
+             .count());
         unreachable!("entropy_heap is empty, but there are still uncollapsed cells");
     }
 
@@ -516,7 +518,7 @@ impl CoreState {
     // Basic search and kill loop
     //
     #[allow(dead_code)]
-    fn run(&mut self) -> (RunStatus, Grid2D<CoreCell>) {
+    fn run(&mut self) -> (RunStatus, &Grid2D<CoreCell>) {
         while self.remaining_uncollapsed_cells > 0 {
             // Choose the next lowest cell
             // which hasn't been collapsed yet
@@ -529,8 +531,9 @@ impl CoreState {
                 RunStatus::Failed => {
                     return (
                         RunStatus::Failed,
-                        Grid2D::init(1, 1, CoreCell::new(1, &self.model)),
-                    )
+                        //Grid2D::init(1, 1, CoreCell::new(1, &self.model)),
+                        &self.grid
+                        )
                 }
                 RunStatus::Successed => {
                     self.propagate();
@@ -540,7 +543,7 @@ impl CoreState {
 
             // Propagate the effects
         }
-        (RunStatus::Successed, self.grid.clone())
+        (RunStatus::Successed, &self.grid)
     }
 
     //
@@ -562,52 +565,52 @@ impl CoreState {
                 // (in the direction of the current one)
                 for compatible_tile in
                     self.model.adjacency_rule[removal_update.tile_index][direction.to_idx()].iter()
-                {
-                    let neighbor = self.grid.get_mut(neighbour_coord).unwrap();
+                    {
+                        let neighbor = self.grid.get_mut(neighbour_coord).unwrap();
 
-                    let count = {
-                        let count = &mut neighbor.tile_enabler_counts[compatible_tile].by_direction
-                            [direction.opposite().to_idx()];
+                        let count = {
+                            let count = &mut neighbor.tile_enabler_counts[compatible_tile].by_direction
+                                [direction.opposite().to_idx()];
 
-                        if *count == 0 {
-                            continue;
-                        }
+                            if *count == 0 {
+                                continue;
+                            }
 
-                        *count -= 1;
-                        *count
-                    };
-
-                    // If count is 0, we want to remove the tile from the neighbour
-                    if count == 0 {
-                        if neighbor.is_collpased
-                            || neighbor.tile_enabler_counts[compatible_tile]
-                                .by_direction
-                                .iter()
-                                .enumerate()
-                                .filter(|(dir, _)| dir != &(direction.opposite().to_idx()))
-                                .map(|(_, v)| v)
-                                .any(|&v| v == 0)
-                        {
-                            continue;
-                        }
-
-                        self.grid
-                            .get_mut(neighbour_coord)
-                            .unwrap()
-                            .remove_tile(compatible_tile, &self.model);
-
-                        let entropy = EntropyCoord {
-                            entropy: self.grid.get(neighbour_coord).unwrap().entropy(),
-                            coord: neighbour_coord,
+                            *count -= 1;
+                            *count
                         };
-                        self.entropy_heap.push(entropy);
 
-                        self.tile_removals.push_back(RemovalUpdate {
-                            tile_index: compatible_tile,
-                            coord: neighbour_coord,
-                        });
+                        // If count is 0, we want to remove the tile from the neighbour
+                        if count == 0 {
+                            if neighbor.is_collpased
+                                || neighbor.tile_enabler_counts[compatible_tile]
+                                    .by_direction
+                                    .iter()
+                                    .enumerate()
+                                    .filter(|(dir, _)| dir != &(direction.opposite().to_idx()))
+                                    .map(|(_, v)| v)
+                                    .any(|&v| v == 0)
+                                    {
+                                        continue;
+                                    }
+
+                            self.grid
+                                .get_mut(neighbour_coord)
+                                .unwrap()
+                                .remove_tile(compatible_tile, &self.model);
+
+                            let entropy = EntropyCoord {
+                                entropy: self.grid.get(neighbour_coord).unwrap().entropy(),
+                                coord: neighbour_coord,
+                            };
+                            self.entropy_heap.push(entropy);
+
+                            self.tile_removals.push_back(RemovalUpdate {
+                                tile_index: compatible_tile,
+                                coord: neighbour_coord,
+                            });
+                        }
                     }
-                }
             }
         }
     }
@@ -660,7 +663,7 @@ mod tests {
             assert_eq!(
                 &cs2.model.samples[sample_id].region.data,
                 &target_sample.region.data
-            );
+                );
 
             (0..cs2.model.size()).for_each(|idx| {
                 if idx == sample_id {
@@ -679,10 +682,10 @@ mod tests {
 
             // Artifact collected from precision error
             assert!(approx_equal(
-                non_cached_entropy[0] as f64,
-                cached_entropy[0] as f64,
-                0
-            ))
+                    non_cached_entropy[0] as f64,
+                    cached_entropy[0] as f64,
+                    0
+                    ))
         }
     }
 
@@ -758,18 +761,18 @@ mod tests {
         let sample_1 = find_sample_idx(
             &cs.model,
             vec![
-                [136, 136, 255],
-                [136, 136, 255],
-                [136, 136, 255],
-                [136, 136, 255],
-                [0, 0, 0],
-                [0, 0, 0],
-                [136, 136, 255],
-                [0, 0, 0],
-                [0, 0, 0],
+            [136, 136, 255],
+            [136, 136, 255],
+            [136, 136, 255],
+            [136, 136, 255],
+            [0, 0, 0],
+            [0, 0, 0],
+            [136, 136, 255],
+            [0, 0, 0],
+            [0, 0, 0],
             ],
-        )
-        .unwrap();
+            )
+            .unwrap();
 
         let init_enablers_count = cs.model.get_initial_tile_enabler_counts();
         let sample_1_enablers_count = &init_enablers_count[sample_1];
@@ -777,19 +780,19 @@ mod tests {
         assert_eq!(
             sample_1_enablers_count.by_direction[Direction::Up.to_idx()],
             1
-        );
+            );
         assert_eq!(
             sample_1_enablers_count.by_direction[Direction::Right.to_idx()],
             2
-        );
+            );
         assert_eq!(
             sample_1_enablers_count.by_direction[Direction::Left.to_idx()],
             1
-        );
+            );
         assert_eq!(
             sample_1_enablers_count.by_direction[Direction::Down.to_idx()],
             2
-        );
+            );
     }
 
     #[test]
@@ -799,18 +802,18 @@ mod tests {
         let sample_1 = find_sample_idx(
             &cs.model,
             vec![
-                [0, 0, 0],
-                [0, 0, 0],
-                [0, 0, 0],
-                [0, 0, 0],
-                [0, 0, 0],
-                [0, 0, 0],
-                [0, 0, 0],
-                [0, 0, 0],
-                [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
             ],
-        )
-        .unwrap();
+            )
+            .unwrap();
 
         let init_enablers_count = cs.model.get_initial_tile_enabler_counts();
         let sample_1_enablers_count = &init_enablers_count[sample_1];
@@ -818,19 +821,19 @@ mod tests {
         assert_eq!(
             sample_1_enablers_count.by_direction[Direction::Up.to_idx()],
             2
-        );
+            );
         assert_eq!(
             sample_1_enablers_count.by_direction[Direction::Right.to_idx()],
             2
-        );
+            );
         assert_eq!(
             sample_1_enablers_count.by_direction[Direction::Left.to_idx()],
             2
-        );
+            );
         assert_eq!(
             sample_1_enablers_count.by_direction[Direction::Down.to_idx()],
             2
-        );
+            );
 
         assert!(cs.model.adjacency_rule[sample_1][Direction::Down.to_idx()].contains(sample_1));
     }
