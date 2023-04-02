@@ -1,4 +1,5 @@
 use super::vector2::Vector2;
+use rayon::prelude::*;
 
 // Note: The attributes are public
 //
@@ -10,7 +11,7 @@ pub struct Grid2D<T> {
     pub data: Vec<T>,
 }
 
-impl<T: Clone> Grid2D<T> {
+impl<T: Clone + Send + Sync> Grid2D<T> {
     pub fn clone_range(&self, origin: Vector2, size: Vector2) -> Grid2D<T> {
         let in_range = |pos: Vector2| {
             pos.x >= origin.x
@@ -24,7 +25,7 @@ impl<T: Clone> Grid2D<T> {
             height: size.y as usize,
             data: self
                 .data
-                .iter()
+                .par_iter()
                 .enumerate()
                 .filter(|(idx, _)| in_range(self.to_coord(*idx).unwrap()))
                 .map(|(_, e)| e.clone())
