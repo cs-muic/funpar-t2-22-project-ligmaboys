@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use rayon::prelude::{IntoParallelRefIterator, IntoParallelIterator, ParallelIterator};
+
 use crate::core::TileEnablerCount;
 use crate::data::direction::{Direction, ALL_DIRECTIONS};
 use crate::data::sample::{Sample, SampleID};
@@ -34,7 +36,7 @@ impl Model {
         let mut unprocessed_samples = image.sample(n_dimensions as i32);
         if rotation {
             unprocessed_samples = unprocessed_samples
-                .iter()
+                .par_iter()
                 .flat_map(|sample| sample.rotate())
                 .collect();
         }

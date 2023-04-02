@@ -8,6 +8,7 @@ use crate::{data::grid2d::Grid2D, model::Model};
 
 use crate::entropy_coord::EntropyCoord;
 use rand::Rng;
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 
 #[allow(dead_code)]
 pub type TileIndex = usize;
@@ -184,7 +185,7 @@ enum RunStatus {
     Failed,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CoreState {
     // Output grid
     pub grid: Grid2D<CoreCell>,
@@ -315,21 +316,19 @@ impl CoreState {
         let mut corestate = CoreState::new(path, dimensions, width, height, rotation);
         let (mut left, mut right) = corestate.collapse_middle();
 
-        use std::time::Instant;
-        left.run();
-        right.run();
+        let (left, right) = rayon::join(|| left.restart(), || right.restart());
 
         // Copy result into output grid
 
         let mut output_grid = Grid2D::init(width, height, 0);
 
-        for (coord, cell) in left.grid.enumerate() {
+        for (coord, cell) in left.enumerate() {
             if let Some(tile_index) = cell.get_the_only_possible_tile_index() {
                 output_grid.set(coord, tile_index);
             }
         }
 
-        for (coord, cell) in right.grid.enumerate() {
+        for (coord, cell) in right.enumerate() {
             if let Some(tile_index) = cell.get_the_only_possible_tile_index() {
                 output_grid.set(
                     Vector2 {
@@ -347,6 +346,22 @@ impl CoreState {
             .map(|&sample_id| corestate.model.samples[sample_id].get_top_left_pixel())
             .collect()
     }
+    pub fn restart(&mut self) -> Grid2D<CoreCell> {
+        use std::time::Instant;
+        let now = Instant::now();
+        let mut snapshot = self.clone();
+        let mut grid = Grid2D::init(1, 1, CoreCell::new(1, &self.model));
+        let mut run_status = RunStatus::Failed;
+        let mut count = 0;
+        while run_status != RunStatus::Successed {
+            snapshot = self.clone();
+            (run_status, grid) = snapshot.run();
+            count += 1;
+        }
+        let elapsed = now.elapsed();
+        println!("Count: {}, Elapsed: {:.2?}", count, elapsed);
+        return grid;
+    }
     pub fn process(
         path: &str,
         dimensions: usize,
@@ -363,7 +378,7 @@ impl CoreState {
         while run_status != RunStatus::Successed {
             println!("running...");
             corestate = CoreState::new(path, dimensions, width, height, rotation);
-            run_status = corestate.run();
+            let (run_status, _grid) = corestate.run();
             println!("Elapsed: {:.2?}", elapsed);
         }
 
@@ -501,7 +516,7 @@ impl CoreState {
     // Basic search and kill loop
     //
     #[allow(dead_code)]
-    fn run(&mut self) -> RunStatus {
+    fn run(&mut self) -> (RunStatus, Grid2D<CoreCell>) {
         while self.remaining_uncollapsed_cells > 0 {
             // Choose the next lowest cell
             // which hasn't been collapsed yet
@@ -511,7 +526,12 @@ impl CoreState {
             let collapse_status = self.collapse_cell_at(next_coord);
 
             match collapse_status {
-                RunStatus::Failed => return RunStatus::Failed,
+                RunStatus::Failed => {
+                    return (
+                        RunStatus::Failed,
+                        Grid2D::init(1, 1, CoreCell::new(1, &self.model)),
+                    )
+                }
                 RunStatus::Successed => {
                     self.propagate();
                     self.remaining_uncollapsed_cells -= 1;
@@ -520,7 +540,7 @@ impl CoreState {
 
             // Propagate the effects
         }
-        RunStatus::Successed
+        (RunStatus::Successed, self.grid.clone())
     }
 
     //
