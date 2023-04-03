@@ -10,7 +10,7 @@ use crate::{data::grid2d::Grid2D, model::Model};
 use crate::entropy_coord::EntropyCoord;
 use rand::Rng;
 use rayon::prelude::{
-    IntoParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator,
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator,
 };
 
 #[allow(dead_code)]
@@ -186,7 +186,7 @@ impl CoreCell {
 }
 
 #[derive(Eq, PartialEq)]
-enum RunStatus {
+pub enum RunStatus {
     Succeeded,
     Failed,
 }
@@ -233,7 +233,7 @@ impl CoreState {
     pub fn collapse_middle(&mut self) -> (CoreState, CoreState, CoreState, CoreState) {
         let sample_size = self.model.samples[0].region.width;
         let middle = self.grid.width / 2;
-        let vertical_middle = self.grid.height /2;
+        let vertical_middle = self.grid.height / 2;
 
         let x = middle - ((sample_size / 2) + 1);
         let y = vertical_middle - ((sample_size / 2) + 1);
@@ -243,123 +243,157 @@ impl CoreState {
         let mut right_entropy = BinaryHeap::<EntropyCoord>::new();
         let mut right_bottom_entropy = BinaryHeap::<EntropyCoord>::new();
 
+        let mut collapse_target = BinaryHeap::new();
 
         for pos_y in 0..self.grid.height {
             for pos_x in 0..self.grid.width {
+                let in_horizontal = pos_x > x && pos_x < x + sample_size + 1;
+                let in_vertical = pos_y > y && pos_y < y + sample_size + 1;
 
                 // Vertical strip
-                if pos_x > x+1 && pos_x <= x+sample_size-1 {
-
-                    self.forced_collapse(Vector2 {
+                if in_horizontal || in_vertical {
+                    let pos = Vector2 {
                         x: pos_x as i32,
                         y: pos_y as i32,
+                    };
+                    collapse_target.push(EntropyCoord {
+                        coord: pos,
+                        entropy: self.grid.get(pos).unwrap().entropy(),
                     });
-                // // Horizontal Strip
-                } else if pos_y > y+1 && pos_y <= y+sample_size-1 {
-                    self.forced_collapse(Vector2 {
-                        x: pos_x as i32,
-                        y: pos_y as i32,
-                    });
-                } else {
                 }
             }
         }
 
+        while let Some(entropy_coord) = collapse_target.pop() {
+            let cell = self.grid.get(entropy_coord.coord).unwrap();
 
-        for y in 0..self.grid.height {
-            for x in 0..self.grid.width {
+            if cell.is_collpased {
+                continue;
+            }
+
+            self.forced_collapse(entropy_coord.coord);
+
+            for &direction in &ALL_DIRECTIONS {
+                // Propagate the effect to the neighbor in each direction
+                let neighbour_coord = entropy_coord.coord.neighbor(direction);
+
+                let in_horizontal = neighbour_coord.x as usize > x
+                    && (neighbour_coord.x as usize) < x + sample_size + 1;
+                let in_vertical = neighbour_coord.y as usize > y
+                    && (neighbour_coord.y as usize) < y + sample_size + 1;
+
+                if self.grid.valid_pos(neighbour_coord) && (in_horizontal || in_vertical) {
+                    let neighbor_cell = self.grid.get(neighbour_coord).unwrap();
+                    if neighbor_cell.entropy() < entropy_coord.entropy {
+                        collapse_target.push(EntropyCoord {
+                            coord: neighbour_coord,
+                            entropy: neighbor_cell.entropy(),
+                        });
+                    }
+                }
+            }
+        }
+
+        for pos_y in 0..self.grid.height {
+            for pos_x in 0..self.grid.width {
+                let in_horizontal = pos_x > x && pos_x < x + sample_size + 1;
+                let in_vertical = pos_y > y && pos_y < y + sample_size + 1;
+
+                // Vertical strip
+                if in_horizontal || in_vertical {
+                    continue;
+                }
+
                 // top left
-                if x < middle && y < vertical_middle { 
+                if pos_x < middle && pos_y < vertical_middle {
                     left_entropy.push(EntropyCoord {
                         entropy: self
                             .grid
                             .get(Vector2 {
-                                x: x as i32,
-                                y: y as i32,
+                                x: pos_x as i32,
+                                y: pos_y as i32,
                             })
                             .unwrap()
                             .entropy(),
                         coord: Vector2 {
-                            x: x as i32,
-                            y: y as i32,
+                            x: pos_x as i32,
+                            y: pos_y as i32,
                         },
                     });
                 // bottom left
-                } else if x < middle && y > vertical_middle {
+                } else if pos_x < middle && pos_y > vertical_middle {
                     left_bottom_entropy.push(EntropyCoord {
                         entropy: self
                             .grid
                             .get(Vector2 {
-                                x: x as i32,
-                                y: y as i32,
+                                x: pos_x as i32,
+                                y: pos_y as i32,
                             })
                             .unwrap()
                             .entropy(),
                         coord: Vector2 {
-                            x: x as i32,
-                            y: (y - vertical_middle) as i32,
+                            x: pos_x as i32,
+                            y: (pos_y - vertical_middle) as i32,
                         },
                     });
                 // top right
-                } else if x > middle && y < vertical_middle {
+                } else if pos_x >= middle && pos_y < vertical_middle {
                     right_entropy.push(EntropyCoord {
                         entropy: self
                             .grid
                             .get(Vector2 {
-                                x: x as i32,
-                                y: y as i32,
+                                x: pos_x as i32,
+                                y: pos_y as i32,
                             })
                             .unwrap()
                             .entropy(),
                         coord: Vector2 {
-                            x: (x - middle) as i32,
-                            y: y as i32,
+                            x: (pos_x - middle) as i32,
+                            y: pos_y as i32,
                         },
                     });
                 // bottom right
-                } else if x > middle && y > vertical_middle {
+                } else if pos_x >= middle && pos_y > vertical_middle {
                     right_bottom_entropy.push(EntropyCoord {
                         entropy: self
                             .grid
                             .get(Vector2 {
-                                x: x as i32,
-                                y: y as i32,
+                                x: pos_x as i32,
+                                y: pos_y as i32,
                             })
                             .unwrap()
                             .entropy(),
                         coord: Vector2 {
-                            x: (x - middle) as i32,
-                            y: (y - vertical_middle) as i32,
+                            x: (pos_x - middle) as i32,
+                            y: (pos_y - vertical_middle) as i32,
                         },
                     });
-
-                    
-                } 
+                }
             }
         }
 
-
-        let make_grid = |o_x, o_y, s_x, s_y| { self.grid.clone_range(
-            Vector2 { x: o_x, y: o_y },
-            Vector2 {
-                x: s_x,
-                y: s_y,
-            }
-        )
-    };
+        let make_grid = |o_x, o_y, s_x, s_y| {
+            self.grid
+                .clone_range(Vector2 { x: o_x, y: o_y }, Vector2 { x: s_x, y: s_y })
+        };
 
         let left_grid = make_grid(0, 0, middle as i32, vertical_middle as i32);
-        let left_bottom_grid = make_grid(0, vertical_middle as i32, middle as i32, vertical_middle as i32);
+        let left_bottom_grid = make_grid(
+            0,
+            vertical_middle as i32,
+            middle as i32,
+            vertical_middle as i32,
+        );
         let right_grid = make_grid(middle as i32, 0, middle as i32, vertical_middle as i32);
-        let right_bottom_grid = make_grid(middle as i32, vertical_middle as i32, middle as i32, vertical_middle as i32);
+        let right_bottom_grid = make_grid(
+            middle as i32,
+            vertical_middle as i32,
+            middle as i32,
+            vertical_middle as i32,
+        );
 
-
-        let get_remaining = |grid: &Grid2D<CoreCell>| { grid.data
-            .iter()
-            .filter(|cell| !cell.is_collpased)
-            .count() };
-
-
+        let get_remaining =
+            |grid: &Grid2D<CoreCell>| grid.data.iter().filter(|cell| !cell.is_collpased).count();
 
         let left_remains = get_remaining(&left_grid);
         let left_bottom_remains = get_remaining(&left_bottom_grid);
@@ -379,8 +413,12 @@ impl CoreState {
         let left_cs = make_cs(left_grid, left_remains, left_entropy);
         let left_bottom_cs = make_cs(left_bottom_grid, left_bottom_remains, left_bottom_entropy);
         let right_cs = make_cs(right_grid, right_remains, right_entropy);
-        let right_bottom_cs = make_cs(right_bottom_grid, right_bottom_remains, right_bottom_entropy);
-    
+        let right_bottom_cs = make_cs(
+            right_bottom_grid,
+            right_bottom_remains,
+            right_bottom_entropy,
+        );
+
         (left_cs, right_cs, left_bottom_cs, right_bottom_cs)
     }
 
@@ -396,7 +434,6 @@ impl CoreState {
         height: usize,
         rotation: bool,
     ) -> Vec<Rgb> {
-
         println!("Image Processing...");
 
         let model_creation_time = Instant::now();
@@ -406,31 +443,37 @@ impl CoreState {
             model_creation_time.elapsed()
         );
 
-        let model_split = Instant::now();
-        let (mut left, mut right, mut left_bottom, mut right_bottom) = corestate.collapse_middle();
-        println!("Model Split Elapsed Time: {:.2?}", model_split.elapsed());
+        let grid_res: Vec<_> = {
+            let mut res = vec![];
 
+            while res.len() < 4 {
+                let model_split = Instant::now();
 
-        println!(); 
+                corestate = CoreState::new(path, dimensions, width, height, rotation);
 
-        let compute_time = Instant::now();
+                println!("Attempting Model Split...");
+                let (left, right, left_bottom, right_bottom) = corestate.collapse_middle();
+                println!("Model Split Success... {:.2?}", model_split.elapsed());
 
-        let grid_res: Vec<_> = vec![left, right, left_bottom, right_bottom].par_iter_mut().map(|cs| cs.restart()).collect();
+                println!();
+
+                res = vec![left, right, left_bottom, right_bottom]
+                    .par_iter_mut()
+                    .enumerate()
+                    .flat_map(|(id, cs)| cs.restart(id as u8))
+                    .collect();
+            }
+            res
+        };
 
         let left = &grid_res[0];
         let right = &grid_res[1];
         let left_bottom = &grid_res[2];
-        let right_bottom =  &grid_res[3];
-
-
-
+        let right_bottom = &grid_res[3];
 
         // let left_bottom = left_bottom.restart();
 
-        println!(
-            "Computation Elapsed Time: {:.2?}",
-            compute_time.elapsed()
-        );
+        // println!("Computation Elapsed Time: {:.2?}", compute_time.elapsed());
 
         // Copy result into output grid
 
@@ -446,7 +489,7 @@ impl CoreState {
             if let Some(tile_index) = cell.get_the_only_possible_tile_index() {
                 output_grid.set(
                     Vector2 {
-                        x: coord.x as i32 + (width / 2) as i32,
+                        x: coord.x + (width / 2) as i32,
                         y: coord.y,
                     },
                     tile_index,
@@ -459,7 +502,7 @@ impl CoreState {
                 output_grid.set(
                     Vector2 {
                         x: coord.x,
-                        y: coord.y as i32 + (height / 2) as i32,
+                        y: coord.y + (height / 2) as i32,
                     },
                     tile_index,
                 );
@@ -470,8 +513,8 @@ impl CoreState {
             if let Some(tile_index) = cell.get_the_only_possible_tile_index() {
                 output_grid.set(
                     Vector2 {
-                        x: coord.x as i32 + (width / 2) as i32,
-                        y: coord.y as i32 + (height / 2) as i32,
+                        x: coord.x + (width / 2) as i32,
+                        y: coord.y + (height / 2) as i32,
                     },
                     tile_index,
                 );
@@ -484,16 +527,19 @@ impl CoreState {
             .map(|&sample_id| corestate.model.samples[sample_id].get_top_left_pixel())
             .collect()
     }
-    pub fn restart(&mut self) -> Grid2D<CoreCell> {
-        use std::time::Instant;
+
+    pub fn restart(&mut self, process_id: u8) -> Option<Grid2D<CoreCell>> {
         let snapshot = self.clone();
-        let mut count = 1;
+
+        let retry_count = 30;
+        let mut count = 0;
         loop {
+            count += 1;
             let mut candidates = vec![snapshot.clone(); 4];
+
             let candidates_result = candidates
                 .par_iter_mut()
                 .flat_map(|candidate| {
-                    
                     let (status, grid) = candidate.run();
 
                     if status == RunStatus::Succeeded {
@@ -501,15 +547,17 @@ impl CoreState {
                     } else {
                         Err(())
                     }
-
                 })
                 .find_any(|_| true);
 
             if let Some(candid_res) = candidates_result {
-                return candid_res.clone();
+                println!("Subsection Completed: {}", process_id);
+                return Some(candid_res.clone());
             }
 
-            count += 1;
+            if count > retry_count {
+                return None;
+            }
         }
     }
 
@@ -585,16 +633,9 @@ impl CoreState {
             // Otherwise we do nothing...
         }
 
-        return None;
-
-        // Remaining cells > 0 but heap is empty...
-        dbg!(&self
-            .grid
-            .data
-            .iter()
-            .filter(|v| v.possible.len() != 1)
-            .count());
-        unreachable!("entropy_heap is empty, but there are still uncollapsed cells");
+        // Entropy_heap is empty, but there are still uncollapsed cells
+        // Just fail and retry
+        None
     }
 
     //
@@ -639,19 +680,16 @@ impl CoreState {
     //
     #[allow(dead_code)]
     fn run(&mut self) -> (RunStatus, &Grid2D<CoreCell>) {
-        let now = Instant::now();
-
         while self.remaining_uncollapsed_cells > 0 {
             // Choose the next lowest cell
             // which hasn't been collapsed yet
-            let next_coord;
 
-            match self.choose_next_cell() {
-                Some(coord) => next_coord = coord,
+            let next_coord = match self.choose_next_cell() {
+                Some(coord) => coord,
                 None => {
                     return (RunStatus::Failed, &self.grid);
                 }
-            }
+            };
 
             // Collapse the chosen cell
             let collapse_status = self.collapse_cell_at(next_coord);
