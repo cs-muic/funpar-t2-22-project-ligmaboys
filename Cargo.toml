@@ -1,0 +1,16 @@
+[package]
+name = "funpar-t2-22-project-ligmaboys"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bit-set = "0.5.3"
+check = "1.0.0"
+clap = { version = "4.1.4", features = ["derive"] }
+fmt = "0.1.0"
+image = "0.24.5"
+rand = "0.8.5"
+rayon = "1.7.0"
+transpose = "0.2.2"
